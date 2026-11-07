@@ -1,7 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges">
-  <rect width="16" height="16" fill="#14171d"/>
-  <rect x="3" y="3" width="4" height="4" fill="#5fcf9c"/>
-  <rect x="9" y="3" width="4" height="4" fill="#7ba7f0"/>
-  <rect x="3" y="9" width="4" height="4" fill="#e5b84e"/>
-  <rect x="9" y="9" width="4" height="4" fill="#f08a63"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Cyrus"><defs><mask id="cyrus-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100"><rect width="100" height="100" fill="white"/><circle cx="60" cy="60" r="34" fill="black"/></mask></defs><rect width="100" height="100" rx="22" fill="#0c0d10"/><g transform="translate(16 16) scale(0.68)"><g mask="url(#cyrus-cut)"><circle cx="42" cy="42" r="33" fill="none" stroke="#f2f4f7" stroke-width="7"/></g><circle cx="60" cy="60" r="27" fill="#f2f4f7"/></g></svg>

@@ -1,88 +1,168 @@
-import { useCallback, useEffect, useState } from "react";
-import { QUEUES, ROUTE_CLASSES } from "@placesync/shared";
-import { apiGet } from "./lib/api";
-import "./App.css";
+import { useEffect, useMemo, type ReactNode } from "react";
+import { BrowserRouter, Link, Navigate, Outlet, Route, Routes, useLocation } from "react-router";
+import type { Role } from "@cyrus/shared";
+import { AuthProvider } from "./app/auth";
+import { useAuth } from "./app/useAuth";
+import { AREAS, homeFor, STUDENT_AREA } from "./app/nav";
+import Shell from "./app/Shell";
+import { EmptyState, ShapeDefs, Sprite } from "./components/ui";
+import { APP_NAME } from "./lib/brand";
+import AcceptInvite from "./pages/auth/AcceptInvite";
+import { BarePage } from "./pages/auth/AuthLayout";
+import { useTitle } from "./lib/useTitle";
+import { ForgotPassword, ResetPassword } from "./pages/auth/PasswordReset";
+import SignIn from "./pages/auth/SignIn";
+import SignUp from "./pages/auth/SignUp";
+import VerifyEmail from "./pages/auth/VerifyEmail";
+import ChangePassword from "./pages/app/ChangePassword";
+import Placeholder from "./pages/app/Placeholder";
+import StudentHome from "./pages/app/StudentHome";
+import SystemStatus from "./pages/app/SystemStatus";
 
-interface Check {
-  ok: boolean;
-  ms: number;
-  error?: string;
-}
-interface Ready {
-  status: "ready" | "not_ready";
-  checks: { database: Check; redis: Check };
-}
-
-type Row = { name: string; state: "checking" | "ok" | "down"; note: string };
-
-/**
- * Temporary setup-check screen: shows whether the API, database and Redis are reachable.
- * Replaced by the real sign-in screen once the auth module lands.
- */
-export default function App() {
-  const [rows, setRows] = useState<Row[]>([
-    { name: "API", state: "checking", note: "" },
-    { name: "Database", state: "checking", note: "" },
-    { name: "Redis", state: "checking", note: "" },
-  ]);
-
-  const run = useCallback(async () => {
-    setRows((r) => r.map((x) => ({ ...x, state: "checking", note: "" })));
-    try {
-      await apiGet<{ status: string }>("/health");
-      const ready = await apiGet<Ready>("/ready", [503]);
-      const show = (c: Check): Pick<Row, "state" | "note"> =>
-        c.ok ? { state: "ok", note: `${c.ms} ms` } : { state: "down", note: c.error ?? "not reachable" };
-      setRows([
-        { name: "API", state: "ok", note: "responding" },
-        { name: "Database", ...show(ready.checks.database) },
-        { name: "Redis", ...show(ready.checks.redis) },
-      ]);
-    } catch {
-      setRows([
-        { name: "API", state: "down", note: "not running — start it with pnpm dev:api" },
-        { name: "Database", state: "down", note: "unknown until the API runs" },
-        { name: "Redis", state: "down", note: "unknown until the API runs" },
-      ]);
-    }
-  }, []);
-
-  useEffect(() => {
-    void run();
-  }, [run]);
-
+function Loading() {
   return (
-    <main className="setup">
-      <header>
-        <p className="eyebrow">PlaceSync · development build</p>
-        <h1>Setup check</h1>
-        <p className="muted">This screen confirms the local services are running. It will be replaced by sign-in.</p>
-      </header>
-
-      <ul className="checks" aria-live="polite">
-        {rows.map((r) => (
-          <li key={r.name} className={`check ${r.state}`}>
-            <span className="dot" aria-hidden="true" />
-            <span className="name">{r.name}</span>
-            <span className="note">{r.state === "checking" ? "checking…" : r.note}</span>
-          </li>
-        ))}
-      </ul>
-
-      <button type="button" onClick={() => void run()}>
-        Check again
-      </button>
-
-      <section className="facts">
-        <div>
-          <h2>Job queues</h2>
-          <p>{Object.values(QUEUES).map((q) => q.name).join(" · ")}</p>
-        </div>
-        <div>
-          <h2>Route classes</h2>
-          <p>{Object.values(ROUTE_CLASSES).map((c) => c.label).join(" · ")}</p>
-        </div>
-      </section>
-    </main>
+    <div className="bare">
+      <div className="loading" role="status">
+        <Sprite name="smith" size={96} plays />
+        <p className="faint">Opening {APP_NAME}…</p>
+      </div>
+    </div>
   );
 }
+
+/** Signed-in pages. While the start-up refresh runs, show a loader; when signed out, go to sign-in and come back after. */
+function RequireAuth() {
+  const { status } = useAuth();
+  const location = useLocation();
+  if (status === "loading") return <Loading />;
+  if (status === "signedOut") return <Navigate to="/sign-in" replace state={{ from: location.pathname + location.search }} />;
+  return <Shell />;
+}
+
+/** Public auth pages: someone already signed in goes home. */
+function PublicOnly() {
+  const { status } = useAuth();
+  if (status === "loading") return <Loading />;
+  if (status === "signedIn") return <Navigate to="/" replace />;
+  return <Outlet />;
+}
+
+/** An area (student, office, company…) opens only for its roles. Opening it switches the active role when the person has one. */
+function RequireRole({ roles, children }: { roles: Role[]; children: ReactNode }) {
+  const { me, role, setRole } = useAuth();
+  const allowed = useMemo(() => me?.roles.filter((r) => roles.includes(r)) ?? [], [me, roles]);
+  const fits = role !== null && roles.includes(role);
+  useEffect(() => {
+    if (!fits && allowed.length) setRole(allowed[0]);
+  }, [fits, allowed, setRole]);
+  if (fits) return <>{children}</>;
+  if (allowed.length) return null;
+  return <NotForYou />;
+}
+
+function NotForYou() {
+  const { role } = useAuth();
+  useTitle("Not available");
+  return (
+    <>
+      <header className="page-head">
+        <h1 className="title">Not available</h1>
+      </header>
+      <EmptyState sprite="blocked" family="ember" action={{ to: role ? homeFor(role) : "/", label: "Back to my home" }}>
+        This page is for a different role. Your account can't open it.
+      </EmptyState>
+    </>
+  );
+}
+
+function NotFound() {
+  useTitle("Page not found");
+  return (
+    <>
+      <header className="page-head">
+        <h1 className="title">Page not found</h1>
+      </header>
+      <EmptyState sprite="ask" family="sun" action={{ to: "/", label: "Back to my home" }}>
+        There's nothing at this address. It may have moved, or the link has a typo.
+      </EmptyState>
+    </>
+  );
+}
+
+function Home() {
+  const { status, role } = useAuth();
+  if (status === "loading") return <Loading />;
+  if (status === "signedOut" || !role) return <Navigate to="/sign-in" replace />;
+  return <Navigate to={homeFor(role)} replace />;
+}
+
+/** /status works signed in (inside the shell) and signed out (plain page). */
+function StatusRoute() {
+  const { status } = useAuth();
+  if (status === "loading") return <Loading />;
+  if (status === "signedIn")
+    return (
+      <Shell>
+        <SystemStatus />
+      </Shell>
+    );
+  return (
+    <BarePage>
+      <div className="panel status-panel">
+        <SystemStatus />
+        <p className="small">
+          <Link to="/sign-in">Back to sign in</Link>
+        </p>
+      </div>
+    </BarePage>
+  );
+}
+
+export function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={<Home />} />
+      <Route element={<PublicOnly />}>
+        <Route path="/sign-in" element={<SignIn />} />
+        <Route path="/sign-up" element={<SignUp />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+      </Route>
+      {/* Open either way: verifying signs you in and then shows a "you're in" screen. */}
+      <Route path="/verify-email" element={<VerifyEmail />} />
+      {/* An invite can add a role to someone already signed in, so it is open either way. */}
+      <Route path="/invite/:token" element={<AcceptInvite />} />
+      <Route path="/status" element={<StatusRoute />} />
+
+      <Route element={<RequireAuth />}>
+        {AREAS.map((area) =>
+          area.items.map((item) => (
+            <Route
+              key={item.to}
+              path={item.to}
+              element={
+                <RequireRole roles={item.only ?? area.roles}>
+                  {area === STUDENT_AREA && item.key === "home" ? <StudentHome /> : <Placeholder item={item} />}
+                </RequireRole>
+              }
+            />
+          )),
+        )}
+        <Route path="/account/password" element={<ChangePassword />} />
+        <Route path="*" element={<NotFound />} />
+      </Route>
+    </Routes>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <ShapeDefs />
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </AuthProvider>
+  );
+}
+

@@ -1,4 +1,4 @@
-# PlaceSync: Backend Design (Brainstorm Draft)
+# Cyrus: Backend Design (Brainstorm Draft)
 
 > **Status: DRAFT for discussion.** Nothing here is final until it is agreed and copied into `PLAN.md`.
 > `PLAN.md` stays the source of truth.
@@ -366,7 +366,7 @@ Runs right after the OTP and produces a **trust report** (flags + a score), neve
 | Scam words in the JD | Look for "registration fee", "security deposit", "pay", "WhatsApp only", etc. | Any match → **high risk** |
 | Known company | Same domain as an already-verified company | Then it's a **new HR of a known company** → different flow (below) |
 
-**Crawler safety (important):** the crawler visits URLs that outsiders typed in, so it could be tricked into hitting our own servers. Rules: only `http/https`; resolve DNS first and **block private/internal IPs** (10.x, 192.168.x, 127.x, 169.254.x cloud metadata, etc.); max 3 redirects, re-checking each; 5 s timeout; 2 MB per page; text only, no running scripts; generic user agent `PlaceSync-Verifier`; runs in the worker, never in the API.
+**Crawler safety (important):** the crawler visits URLs that outsiders typed in, so it could be tricked into hitting our own servers. Rules: only `http/https`; resolve DNS first and **block private/internal IPs** (10.x, 192.168.x, 127.x, 169.254.x cloud metadata, etc.); max 3 redirects, re-checking each; 5 s timeout; 2 MB per page; text only, no running scripts; generic user agent `Cyrus-Verifier`; runs in the worker, never in the API.
 
 **What we don't automate:** LinkedIn scraping (against their terms) and the GST/MCA portals behind CAPTCHAs (we never bypass CAPTCHAs). For those, the trust report shows **one-click links** to the official MCA/GST search pages with the CIN/GSTIN pre-copied, and staff checks by hand.
 
@@ -400,14 +400,14 @@ Runs right after the OTP and produces a **trust report** (flags + a score), neve
 ## 5. Webhooks (for future teams, e.g. WhatsApp/Telegram notifications)
 
 ### Idea
-PlaceSync doesn't send WhatsApp messages itself. It **announces events**. Another team's service subscribes and sends WhatsApp/Telegram/SMS. Our own push/email notifications are just the first subscriber of the same events.
+Cyrus doesn't send WhatsApp messages itself. It **announces events**. Another team's service subscribes and sends WhatsApp/Telegram/SMS. Our own push/email notifications are just the first subscriber of the same events.
 
 ### Design
 - **Event catalogue (versioned):** `drive.published`, `drive.invited`, `participation.opted_in`, `round.scheduled`, `round.updated`, `round.results_published`, `queue.your_turn_soon`, `queue.called`, `drive.final_results_published`, `offer.uploaded`, `announcement.created`, …
 - **Subscriptions** (managed by the TPO in admin): target URL (HTTPS only), chosen events, a secret, active on/off.
 - **Delivery:**
   - JSON body: `{ id, type, version, created_at, data }`
-  - Signed with HMAC-SHA256 using the subscription secret (header `X-PlaceSync-Signature`) + timestamp header, so the receiver can verify the message is really from us and isn't replayed
+  - Signed with HMAC-SHA256 using the subscription secret (header `X-Cyrus-Signature`) + timestamp header, so the receiver can verify the message is really from us and isn't replayed
   - `id` is unique → receivers can ignore duplicates
   - Retries with growing delays (1m, 5m, 30m, 2h, 12h), then `FAILED`; endpoint auto-disabled after many failures; TPO can re-send
   - Delivery log visible in admin (status, response code, time)
@@ -417,6 +417,64 @@ PlaceSync doesn't send WhatsApp messages itself. It **announces events**. Anothe
   - Each subscription gets only the event types the TPO approved for it.
 - **Test button:** sends a sample `ping` event.
 - Later: an incoming-webhook endpoint for delivery receipts from the WhatsApp team (optional).
+
+---
+
+## 5b. Push notifications to phones (Tauri)
+
+**The gap:** Tauri's official `notification` plugin only shows **local** notifications (made by the app while it is running). Push from our server to a phone where the app is in the background or closed needs **FCM** on Android (and APNs on iOS). Tauri has no official plugin for that.
+
+**Plain fact about Android:** reliable background push on Android goes through FCM (Google Play services). Running our own always-on connection instead needs a permanent foreground service with a visible notification, drains battery, and Android may still kill it. So "our own push" means **our own Tauri plugin on top of FCM**, plus our own server sending through FCM. It doesn't mean replacing FCM.
+
+### Option A: third-party plugins (fast start)
+| Plugin | What it gives | Concern |
+|---|---|---|
+| `tauri-plugin-remote-push` (crates.io, 1.0.x) | FCM (Android) + APNs (iOS), get token, permission, foreground messages, token refresh | A review lists **background message handling** as a limitation |
+| `tauri-plugin-mobile-push` (GitHub, git dependency) | FCM + APNs, token, forwards messages and token refresh to Tauri events | Installed from git; check activity and license |
+| `tauri-plugin-notifications` (0.4.x) | System notifications + push via FCM/APNs | Docs thin; check before relying on it |
+
+Use one of these for the **Week 1 test** to prove FCM tokens and delivery work on our phones.
+
+### Option B: our own plugin `tauri-plugin-cyrus-push` (recommended for the real app)
+Small, and we control what matters on drive day: channels, tapping a notification to open the right screen, behaviour when the app is closed.
+
+**Where:** `packages/tauri-plugin-cyrus-push/` (Rust crate + `android/` Kotlin library + `guest-js/` TypeScript API; `ios/` Swift later).
+
+**Android part (Kotlin):**
+- `PushPlugin` (`@TauriPlugin`, extends `Plugin`). Commands:
+  - `requestPermission()`: asks for the Android 13+ `POST_NOTIFICATIONS` permission
+  - `getToken()`: returns the FCM token
+  - `deleteToken()`: used on logout
+  - `getLaunchNotification()`: which notification opened the app, if any
+- Events to JavaScript (via `trigger`): `token-refreshed`, `message-received` (app in foreground), `notification-opened` (user tapped a notification → open `data.link`, e.g. `/me/queue`).
+- `CyrusMessagingService` (extends `FirebaseMessagingService`, registered in the plugin's manifest):
+  - `onNewToken`: saves the token locally and fires `token-refreshed` when the app is open, so the app re-registers it with `POST /me/devices`.
+  - `onMessageReceived`: app in foreground → send to JS (the app shows an in-app banner). App in background → **build the notification ourselves** with `NotificationCompat`, on the right channel, with a tap action that carries the link.
+- **Notification channels** (users can tune each in Android settings):
+  - `queue`: high importance, sound. "Your turn in 2", "You are called".
+  - `drives`: default. Shortlists, round changes, results.
+  - `offers`: high. Offer uploaded.
+  - `general`: low. Announcements.
+- The server sends **data-only** messages, so our service always decides how they look. "Called now" messages use FCM high priority; everything else uses normal priority.
+- Limits to accept: if the user **force-stops** the app, Android delivers nothing until it's opened again. Some phone brands kill background apps aggressively, so the in-app list and email remain the fallback.
+
+**JS API (`guest-js`):** `requestPermission()`, `getToken()`, `onTokenRefreshed(cb)`, `onMessage(cb)`, `onNotificationOpened(cb)`.
+
+**Desktop (Windows) build:** there is no FCM. While the app is open, the realtime socket delivers events and the official `notification` plugin shows them locally. When the app is closed: email.
+
+**iOS:** needs an Apple developer account (paid) for APNs. Out of scope for now; the plugin keeps an `ios/` folder for later.
+
+### Server side (notify worker)
+- `Device` table: user, platform (`android`/`desktop`/`web`), FCM token, app version, last seen. Registered by `POST /me/devices`, removed on logout.
+- The `notify` worker sends through the **FCM HTTP v1 API** with a Firebase service account. The service-account JSON is a secret: its path goes in `.env`, and the file itself is never committed.
+- Tokens that FCM reports as `UNREGISTERED` or invalid are deleted automatically.
+- Each push also creates an **in-app notification row**, so nothing is lost if the push doesn't arrive. Quiet hours and per-channel settings are checked before sending.
+- Email fallback for important events (offers, results) if the user has no active device.
+
+### Steps
+1. **Setup (one time):** set `ANDROID_HOME` / `NDK_HOME` (the SDK and NDK are already installed under `%LOCALAPPDATA%\Android\Sdk`), add the Rust Android targets, run `tauri android init`, and create a Firebase project to get `google-services.json`. **The user creates the Firebase project.**
+2. **Week 1 test with Option A:** get a token on a real phone, send a test push from the server, and check foreground, background and closed-app behaviour.
+3. **Build Option B** (about 3–4 days) in Week 3, alongside notifications. Read an existing plugin's source for reference, but write ours ourselves. Check its license before borrowing any idea that is more than general knowledge.
 
 ---
 
@@ -481,8 +539,8 @@ Prefix: `/api/v1`. Role legend: **P** public · **S** student · **H** company H
 | Method | Route | Who | Purpose |
 |---|---|---|---|
 | POST | `/auth/student/signup` | P | Roll no + email + password → sends OTP |
-| POST | `/auth/otp/verify` | P | Verify email OTP |
-| POST | `/auth/otp/resend` | P | Resend OTP (rate limited) |
+| POST | `/auth/student/verify-email` | P | Verify signup code and sign in *(built)* |
+| POST | `/auth/student/resend-code` | P | Resend signup code (rate limited, same answer for unknown emails) *(built)* |
 | POST | `/auth/login` | P | Email + password → tokens |
 | POST | `/auth/refresh` | P | New access token |
 | POST | `/auth/logout` | any | Revoke refresh token |
@@ -745,7 +803,7 @@ Every route belongs to exactly one class. The full sorted list lives in the **re
 - Pooled/off-campus or virtual drives (links instead of venues).
 
 ## 12. Open questions for this draft
-1. Tauri push test fails → PWA + email, or Expo for students?
+1. Tauri push test fails → PWA + email, or Expo for students? *(Now: test with a third-party plugin first, then build our own FCM plugin, section 5b.)*
 2. ~~Fastify or Express?~~ → **Express** (decided)
 3. TypeScript everywhere? (proposal: yes)
 4. Is k8s required by the guide/university, or a nice-to-have? (changes whether it's P0 or P2)

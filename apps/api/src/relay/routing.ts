@@ -1,4 +1,4 @@
-import type { EventType, QueueKey } from "@placesync/shared";
+import type { EventType, QueueKey } from "@cyrus/shared";
 
 /**
  * Which queues an event goes to after it is committed (BACKEND-DESIGN.md §2).

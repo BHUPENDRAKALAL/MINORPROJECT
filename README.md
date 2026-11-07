@@ -1,4 +1,4 @@
-# PlaceSync
+# Cyrus
 
 Placement drive management and placement data platform for MBM University (7th semester minor project).
 Seya Mali (24UCSE4073) · Bhupendra Kalal (24UCSE4008) · Guide: Dr. Abhishek Gaur · Mentor: Dr. Simran Choudhary
@@ -45,6 +45,14 @@ pnpm infra:up
 pnpm db:migrate
 ```
 
+Create the first TPO account (prints a one-time password):
+
+```bash
+pnpm --filter @cyrus/api create-tpo --email tpo@example.com --name "Placement Officer"
+```
+
+> In development, emails (signup codes, invites) are printed in the **worker** terminal instead of being sent.
+
 > Redis runs on port **6380** (not the usual 6379) because some machines already have an old Redis on 6379.
 
 ## Running in development
@@ -76,7 +84,7 @@ Open http://localhost:5173 for the setup-check screen, and http://localhost:4000
 Desktop app (Tauri), starts the web dev server itself:
 
 ```bash
-pnpm --filter @placesync/web tauri dev
+pnpm --filter @cyrus/web tauri dev
 ```
 
 ## Checks
@@ -84,7 +92,7 @@ pnpm --filter @placesync/web tauri dev
 End-to-end pipeline check (needs the worker and relay running):
 
 ```bash
-pnpm --filter @placesync/api smoke
+pnpm --filter @cyrus/api smoke
 ```
 
 ```bash
@@ -94,6 +102,8 @@ pnpm typecheck
 ```bash
 pnpm test
 ```
+
+Database tests use a separate database (`TEST_DATABASE_URL` in `.env`, wiped on every run). Without it they are skipped.
 
 ```bash
 pnpm build

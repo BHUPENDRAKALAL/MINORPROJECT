@@ -1,4 +1,4 @@
-import type { EventType } from "@placesync/shared";
+import type { EventType } from "@cyrus/shared";
 import type { Prisma } from "../generated/prisma/client.ts";
 
 type Tx = Prisma.TransactionClient;

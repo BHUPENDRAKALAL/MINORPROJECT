@@ -1,6 +1,6 @@
 import type { RequestHandler } from "express";
 import type { Logger } from "pino";
-import { ROUTE_CLASSES, type RouteClass } from "@placesync/shared";
+import { ROUTE_CLASSES, type RouteClass } from "@cyrus/shared";
 
 /** Logs a warning when a route is slower than its weight class allows. */
 export function routeTiming(log: Logger): RequestHandler {

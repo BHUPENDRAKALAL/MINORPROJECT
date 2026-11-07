@@ -1,21 +1,21 @@
 # Local development infrastructure: PostgreSQL + Redis.
 # Start with `pnpm infra:up`. Data is kept in named volumes (outside OneDrive).
-name: placesync
+name: cyrus
 
 services:
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: placesync
-      POSTGRES_PASSWORD: placesync_dev
-      POSTGRES_DB: placesync
+      POSTGRES_USER: cyrus
+      POSTGRES_PASSWORD: cyrus_dev
+      POSTGRES_DB: cyrus
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U placesync -d placesync"]
+      test: ["CMD-SHELL", "pg_isready -U cyrus -d cyrus"]
       interval: 5s
       timeout: 3s
       retries: 10

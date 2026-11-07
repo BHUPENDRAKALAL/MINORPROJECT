@@ -1,7 +1,7 @@
 /**
  * End-to-end check of the background pipeline. Run with the worker and relay running:
  *
- *   pnpm --filter @placesync/api smoke
+ *   pnpm --filter @cyrus/api smoke
  *
  * 1. Writes an outbox event in a transaction  → relay must publish it to the queues.
  * 2. Creates a user-visible Job and queues it → worker must mark it DONE.

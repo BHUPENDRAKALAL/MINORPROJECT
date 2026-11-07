@@ -1,4 +1,4 @@
-import type { EventType } from "@placesync/shared";
+import type { EventType } from "@cyrus/shared";
 import type { Db } from "../lib/db.ts";
 import type { Queues } from "../lib/queues.ts";
 import { queuesFor } from "./routing.ts";

@@ -14,5 +14,5 @@ export default defineConfig({
   outDir: "dist",
   clean: true,
   sourcemap: true,
-  noExternal: ["@placesync/shared"],
+  noExternal: ["@cyrus/shared"],
 });

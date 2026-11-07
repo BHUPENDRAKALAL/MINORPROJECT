@@ -1,6 +1,6 @@
 import { Queue } from "bullmq";
 import type { Redis } from "ioredis";
-import { QUEUES, type QueueKey } from "@placesync/shared";
+import { QUEUES, type QueueKey } from "@cyrus/shared";
 
 export type Queues = Record<QueueKey, Queue>;
 

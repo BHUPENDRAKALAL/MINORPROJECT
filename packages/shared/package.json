@@ -1,5 +1,5 @@
 {
-  "name": "@placesync/shared",
+  "name": "@cyrus/shared",
   "version": "0.1.0",
   "private": true,
   "description": "Constants and types shared by the API, workers and web app",

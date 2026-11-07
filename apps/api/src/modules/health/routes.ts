@@ -39,6 +39,7 @@ export function healthRoutes(deps: HealthDeps): RouteDef[] {
       method: "get",
       path: "/health",
       routeClass: "LIGHT",
+      access: "public",
       summary: "Process is alive",
       tags: ["system"],
       responses: { 200: { description: "Alive", schema: z.object({ status: z.literal("ok"), uptimeSeconds: z.number() }) } },
@@ -48,6 +49,7 @@ export function healthRoutes(deps: HealthDeps): RouteDef[] {
       method: "get",
       path: "/ready",
       routeClass: "LIGHT",
+      access: "public",
       summary: "Database and Redis are reachable",
       tags: ["system"],
       responses: {
@@ -63,6 +65,6 @@ export function healthRoutes(deps: HealthDeps): RouteDef[] {
         res.status(ok ? 200 : 503);
         return { status: ok ? "ready" : "not_ready", checks: { database, redis } };
       },
-    }) as RouteDef,
+    }),
   ];
 }

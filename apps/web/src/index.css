@@ -1,37 +1,153 @@
-/* Base tokens. The full design system comes later (DESIGN-DIRECTION.md). */
-:root {
-  --bg: #f6f7f9;
-  --surface: #ffffff;
-  --fg: #171b22;
-  --muted: #5d6676;
-  --line: #dfe3ea;
-  --accent: #2563c9;
-  --ok: #1f8a5b;
-  --bad: #c4401a;
-  --sans: system-ui, "Segoe UI", Roboto, sans-serif;
-  --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
-  color-scheme: light;
+/* Adapted from Foundry (Apache-2.0), see src/vendor/foundry/LICENSE */
+/* App-specific pieces on top of Foundry's stylesheet (src/vendor/foundry/style.css). Only Foundry tokens are used here. */
+
+#root { min-height: var(--screen); }
+.shell { min-height: var(--screen); }
+.bare { min-height: var(--screen); }
+
+/* The brand mark takes the ink colour of the theme. */
+.logo, .cy-wordmark-mark { color: var(--ink); }
+.mark { gap: var(--space-8); }
+.mark-word { font-family: var(--font-head); font-weight: 700; color: var(--ink); }
+.cy-wordmark { display: inline-flex; align-items: center; gap: var(--space-8); color: var(--ink); font-family: var(--font-head); font-size: var(--text-20); line-height: var(--line-20); font-weight: 700; letter-spacing: -0.01em; }
+.cy-wordmark-mark { width: var(--size-24); height: var(--size-24); }
+.bare-head .mark { text-decoration: none; }
+
+/* Buttons used as rows in a menu */
+button.nav-item, button.switcher-item { width: 100%; justify-content: flex-start; min-height: var(--control-28); padding: 0 var(--space-8); font-weight: 400; text-align: left; background: none; border: 0; }
+button.switcher-item { min-height: var(--control-32); }
+button.nav-item:hover, button.switcher-item:hover { background: var(--sunken); }
+button.switcher-item:hover { background: var(--current); }
+button.switcher-item[aria-current] { font-weight: 600; background: var(--hover); }
+button.nav-item:active, button.switcher-item:active { scale: 1; }
+
+/* The person's menu: Foundry's .who row opens a small panel. At the foot of the side bar on a desk, in the top bar on a phone. */
+.user-menu { position: relative; margin-top: auto; }
+.user-menu > summary { list-style: none; cursor: pointer; border-radius: var(--radius-8); padding-bottom: var(--space-8); transition: background-color var(--dur-fast) var(--ease-out); }
+.user-menu > summary::-webkit-details-marker { display: none; }
+.user-menu > summary:hover { background: var(--sunken); }
+.user-menu .who .icon-chevron { color: var(--ink-quiet); rotate: 180deg; }
+.user-menu[open] .who .icon-chevron { rotate: 0deg; }
+.who-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-menu-panel { position: absolute; left: 0; right: 0; bottom: calc(100% + var(--space-4)); z-index: 3; display: flex; flex-direction: column; gap: var(--space-4); padding: calc(var(--space-8) - var(--hair)); background: var(--panel); border: 1px solid var(--rule-strong); border-radius: var(--radius-16); animation: rise var(--dur-fast) var(--ease-out); }
+.user-menu-email { margin: 0; padding: var(--space-4) var(--space-8) var(--space-8); border-bottom: 1px solid var(--rule); }
+.user-menu-panel .nav-item { min-height: var(--control-32); }
+.user-menu-top { display: none; }
+.shell:has(.side-toggle:checked) .user-menu-side .who { display: flex; justify-content: center; padding-inline: 0; }
+.shell:has(.side-toggle:checked) .user-menu-side .who > :not(.avatar) { display: none; }
+.shell:has(.side-toggle:checked) .user-menu-panel { right: auto; width: var(--sidebar-open, 240px); }
+.shell:has(.side-toggle:checked) .mark-word { display: none; }
+
+/* Page bits */
+.title-crumb { display: inline-flex; align-items: baseline; gap: var(--space-8); }
+.section-head .title { min-height: 0; padding: 0; }
+.panel.stack { padding: var(--space-24); }
+.stack.panel { max-width: var(--form); }
+.field-row { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: var(--space-12); }
+.field-error { margin: 0; color: var(--ember-text); font-size: var(--text-12); line-height: var(--line-12); font-weight: 500; }
+.field-hint { margin: 0; color: var(--ink-faint); font-size: var(--text-12); line-height: var(--line-12); }
+input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--ember-mark); }
+input:read-only:disabled { opacity: 1; color: var(--ink-soft); }
+select {
+  width: 100%;
+  min-height: var(--control-40);
+  padding: var(--space-8) var(--space-12);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: var(--text-14);
+  line-height: var(--line-14);
+  background: var(--sunken);
+  border: 1px solid var(--field);
+  border-radius: var(--radius-8);
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #12151b;
-    --surface: #1a1e26;
-    --fg: #e6eaf0;
-    --muted: #98a1b0;
-    --line: #2a313c;
-    --accent: #7ba7f0;
-    --ok: #5fcf9c;
-    --bad: #f08a63;
-    color-scheme: dark;
-  }
+select:hover { border-color: var(--ink-faint); }
+select:focus-visible { outline-offset: 0; border-color: var(--focus); }
+input[type="number"] { appearance: textfield; }
+.code-input { font-family: var(--font-mono); font-size: var(--text-24); line-height: var(--line-24); letter-spacing: 0.4em; text-align: center; }
+.auth-links { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-8) var(--space-16); margin: var(--space-20) 0 0; color: var(--ink-soft); font-size: var(--text-12); line-height: var(--line-12); }
+.alert .quiet { display: inline; min-height: 0; color: var(--ink); text-decoration: underline; }
+.alert > span { min-width: 0; }
+
+/* Auth pages: the form straight on the page, and the art on the other half of a wide screen */
+.auth-page { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-height: var(--screen); background: var(--paper); }
+.auth-main { display: flex; align-items: center; justify-content: center; min-width: 0; max-width: none; padding: var(--space-64) var(--space-48); }
+.auth-form { width: 100%; max-width: var(--sign-in); }
+.auth-form h1 { font-size: var(--text-32); line-height: var(--line-32); letter-spacing: -0.02em; }
+.auth-form > .lead { margin: var(--space-8) 0 var(--space-32); }
+.auth-form > h1 + .result { margin-top: var(--space-24); }
+.auth-form > .alert { margin: 0 0 var(--space-16); }
+.auth-form .stack { margin: 0; gap: var(--space-16); }
+.auth-form .button-wide { margin-top: var(--space-8); }
+.auth-art { position: sticky; top: 0; isolation: isolate; height: calc(var(--screen) - 2 * var(--space-16)); margin: var(--space-16) var(--space-16) var(--space-16) 0; overflow: hidden; border-radius: var(--radius-24); }
+.auth-art .grid-tile { position: absolute; inset: 0; z-index: -1; }
+.auth-art .sprite { position: absolute; left: var(--size-64); bottom: var(--size-96); }
+.auth-art:hover .sprite { --hover-reaction: hop; }
+
+/* A result moment on the sign-in panel: a sticker, the words, the next step. */
+.result { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-8); }
+.result h2 { font-size: var(--text-20); line-height: var(--line-20); }
+.result .lead { margin: 0 0 var(--space-8); }
+.sticker { display: block; image-rendering: pixelated; }
+
+/* Start-up loader */
+.loading { display: flex; flex-direction: column; align-items: center; gap: var(--space-12); }
+
+/* The student home's hero: a status chip and the next step under the words */
+.hero-cta { margin-top: var(--space-16); }
+.hero .stage { vertical-align: middle; }
+.next-steps > li { display: flex; align-items: center; gap: var(--space-12); padding-inline: var(--space-16); }
+.next-steps .stage { flex: none; min-width: var(--col-80); }
+
+/* System status signed out */
+.status-panel { width: 100%; padding: var(--space-24); }
+
+/* The bottom bar shows the label under the icon */
+.tab-name { overflow: hidden; max-width: 100%; text-overflow: ellipsis; white-space: nowrap; padding-inline: var(--space-4); }
+
+@media (max-width: 1024px) {
+  .auth-page { grid-template-columns: minmax(0, 1fr); }
+  .auth-art { display: none; }
+  .auth-main { align-items: flex-start; padding: var(--space-64) var(--space-24) var(--space-48); }
+  .side .user-menu-side { display: none; }
+  .user-menu-top { display: block; flex: none; margin: 0; }
+  .user-menu-top > summary { padding: var(--space-4); }
+  .user-menu-top .who { margin: 0; padding: var(--space-4); }
+  .user-menu-top .who-name, .user-menu-top .who .icon-chevron { display: none; }
+  .user-menu-top .user-menu-panel { left: auto; right: 0; top: calc(100% + var(--space-4)); bottom: auto; width: var(--sidebar); }
+  .mark-word { display: inline; }
+  .brand { gap: var(--space-12); }
+  .logo { translate: none; }
+  .tabbar { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 }
-* { box-sizing: border-box; }
-html, body { margin: 0; }
-body {
-  background: var(--bg);
-  color: var(--fg);
-  font-family: var(--sans);
-  font-size: 16px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
+
+@media (max-width: 640px) {
+  .auth-main { padding: var(--space-48) var(--gutter) var(--space-32); }
+  .auth-form h1 { font-size: var(--text-24); line-height: var(--line-24); }
+  .field-row { grid-template-columns: minmax(0, 1fr); }
+  .panel.stack { padding: var(--space-16); }
+  select { font-size: var(--text-16); line-height: var(--line-16); }
+  .mark-word { display: none; }
+  .next-steps > li { flex-direction: column; align-items: flex-start; gap: var(--space-4); }
+  .hero:has(.hero-cta) > .sprite { display: none; }
 }
+
+/* VS Code-style side panel: drag the right edge to resize, fold to the icon rail, Ctrl+B to toggle (see app/useSidePanel.ts). */
+.shell { transition: grid-template-columns var(--dur-fast) var(--ease-out); }
+.shell.is-resizing { transition: none; cursor: col-resize; user-select: none; }
+.side-resize {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--sidebar) - 3px);
+  z-index: 4;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+}
+/* A thin line shows on hover, while dragging and on keyboard focus, like VS Code's sash. */
+.side-resize::after { content: ""; position: absolute; top: 0; bottom: 0; left: 2px; width: 2px; background: transparent; transition: background-color var(--dur-fast) var(--ease-out); }
+.side-resize:hover::after, .shell.is-resizing .side-resize::after, .side-resize:focus-visible::after { background: var(--focus); }
+.side-resize:focus-visible { outline: none; }
+.shell.is-resizing .side, .shell.is-resizing main { pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .shell { transition: none; } }
+@media (max-width: 1024px) { .side-resize { display: none; } }

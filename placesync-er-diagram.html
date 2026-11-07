@@ -1,0 +1,559 @@
+<title>PlaceSync Data Model</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Kalam:wght@700&display=swap">
+<style>
+/* Layout: one column; a contents strip, then one ER diagram per area, each with a short note on what it holds. */
+:root {
+  --bg: #f5f7f6;
+  --card: #ffffff;
+  --ink: #18201d;
+  --muted: #58655f;
+  --line: #d9e0dc;
+  --accent: #0f6b5c;
+  --accent-soft: #e0efea;
+  --hand: "Kalam", "Comic Sans MS", cursive;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111715; --card: #18201d; --ink: #e4ece8; --muted: #9db0a8; --line: #2a3632; --accent: #5cc7ae; --accent-soft: #1b322c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111715; --card: #18201d; --ink: #e4ece8; --muted: #9db0a8; --line: #2a3632; --accent: #5cc7ae; --accent-soft: #1b322c;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1100px; margin: 0 auto; padding-block: 36px 72px; display: flex; flex-direction: column; gap: 40px; }
+h1, h2 { margin: 0; line-height: 1.2; text-wrap: balance; }
+h1 { font-family: var(--hand); font-size: clamp(2rem, 6vw, 2.8rem); }
+h2 { font-size: 1.35rem; font-weight: 700; }
+p { margin: 0; max-width: 72ch; }
+.muted { color: var(--muted); }
+.eyebrow { font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+header { display: flex; flex-direction: column; gap: 12px; }
+.stats { display: flex; flex-wrap: wrap; gap: 8px 22px; font-family: var(--mono); font-size: 0.85rem; color: var(--muted); }
+.stats b { color: var(--ink); font-variant-numeric: tabular-nums; }
+nav { display: flex; flex-wrap: wrap; gap: 8px; }
+nav a { font-size: 0.88rem; padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; color: var(--ink); text-decoration: none; background: var(--card); }
+nav a:hover, nav a:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+section { display: flex; flex-direction: column; gap: 12px; scroll-margin-top: 16px; }
+.diagram { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; overflow-x: auto; }
+.diagram pre.mermaid { margin: 0; min-width: 640px; background: transparent; }
+.notes { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 4px; font-size: 0.93rem; max-width: 80ch; }
+code { font-family: var(--mono); font-size: 0.86em; background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; }
+footer { font-size: 0.88rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 16px; }
+</style>
+
+<div class="wrap">
+<header>
+  <span class="eyebrow">PlaceSync · database schema draft</span>
+  <h1>PlaceSync Data Model</h1>
+  <p>Entity–relationship diagrams for the PostgreSQL schema in <code>apps/api/prisma/schema.prisma</code>. Each area is drawn on its own so the diagrams stay readable. Only key columns are shown; the schema file has all of them.</p>
+  <div class="stats"><span><b>43</b> tables</span><span><b>46</b> status/enum types</span><span>Draft · not migrated yet</span></div>
+</header>
+
+<nav aria-label="Areas">
+  <a href="#overview">Overview</a>
+  <a href="#identity">Accounts & files</a>
+  <a href="#companies">Companies</a>
+  <a href="#students">Students & verification</a>
+  <a href="#drives">Drives & rounds</a>
+  <a href="#interviews">Interviews & queue</a>
+  <a href="#offers">Offers & records</a>
+  <a href="#platform">Notifications & platform</a>
+</nav>
+
+<section id="overview">
+  <h2>Overview</h2>
+  <p class="muted">The main path: a company runs a drive, a student takes part, rounds record attendance and results, and the drive ends in an offer and a placement record.</p>
+  <div class="diagram"><pre class="mermaid">
+erDiagram
+  User ||--o| StudentProfile : "is a student"
+  User ||--o{ CompanyMember : "works for"
+  Company ||--o{ CompanyMember : has
+  Company ||--o{ CompanyRequest : "registered via"
+  Company ||--o{ Drive : runs
+  Drive ||--o{ Round : has
+  Drive ||--o{ Participation : has
+  StudentProfile ||--o{ Participation : joins
+  Round ||--o{ Attendance : records
+  Round ||--o{ RoundResult : records
+  Round ||--o{ Panel : "interview panels"
+  Panel ||--o{ QueueEntry : "waiting line"
+  Participation ||--o| Offer : "may get"
+  Offer ||--o| PlacementRecord : "becomes"
+  StudentProfile ||--o{ AcademicRecord : "marks history"
+  StudentProfile ||--o{ StudentDocument : uploads
+  </pre></div>
+</section>
+
+<section id="identity">
+  <h2>Accounts & files</h2>
+  <div class="diagram"><pre class="mermaid">
+erDiagram
+  User ||--o{ RoleGrant : has
+  User ||--o{ Session : "logged in on"
+  User ||--o{ FileObject : uploaded
+  Company ||--o{ Invite : "invites to"
+  User {
+    uuid id PK
+    string email UK
+    datetime emailVerifiedAt
+    string passwordHash
+    enum status "ACTIVE PAUSED DEACTIVATED BLOCKED"
+    datetime pledgeAcceptedAt "review team"
+    string totpSecretEnc "2-step login"
+  }
+  RoleGrant {
+    uuid id PK
+    uuid userId FK
+    enum role "TPO STAFF VOLUNTEER COORDINATOR COMPANY_HR INTERVIEWER STUDENT PLACED_SENIOR"
+    string_array capabilities
+    json scope "branches, batches"
+    datetime expiresAt
+  }
+  Session {
+    uuid id PK
+    uuid userId FK
+    string tokenHash UK
+    datetime expiresAt
+    datetime revokedAt
+  }
+  EmailOtp {
+    uuid id PK
+    string email
+    enum purpose
+    string codeHash
+    int attempts
+    datetime expiresAt
+  }
+  Invite {
+    uuid id PK
+    string email
+    enum role
+    uuid companyId FK
+    string tokenHash UK
+    enum status "SENT ACCEPTED EXPIRED REVOKED"
+    datetime expiresAt
+  }
+  FileObject {
+    uuid id PK
+    uuid ownerId FK
+    enum kind "MARKSHEET RESUME PHOTO JD OFFER_LETTER IMPORT_SHEET"
+    string storageKey UK
+    string sha256 "duplicate check"
+    enum scanStatus "PENDING CLEAN INFECTED FAILED"
+  }
+  PlacementPolicy {
+    string id PK "default"
+    bool blockPlacedStudents
+    float dreamOfferMinCtcLpa
+    int noShowBlockAfter
+    int offerResponseDays
+  }
+  </pre></div>
+  <ul class="notes">
+    <li>One person can hold several roles, e.g. a volunteer is also a student. Staff and volunteers get capabilities, a branch/batch scope and an end date on their <code>RoleGrant</code>.</li>
+    <li>Passwords, refresh tokens, OTPs and invite tokens are stored only as hashes.</li>
+    <li><code>sha256</code> on every file finds the same marksheet uploaded by two students.</li>
+  </ul>
+</section>
+
+<section id="companies">
+  <h2>Companies</h2>
+  <div class="diagram"><pre class="mermaid">
+erDiagram
+  Company ||--o{ CompanyMember : has
+  Company ||--o{ CompanyRequest : "registered via"
+  CompanyRequest ||--o{ CompanyCheck : "trust report"
+  CompanyRequest ||--o{ CompanyCallback : "phone checks"
+  Company ||--o{ CompanyReport : "reported by students"
+  Company ||--o{ CompanyFaq : has
+  Company {
+    uuid id PK
+    string name
+    string domain UK
+    string cin
+    string gstin
+    string officialPhone
+    enum status "APPROVED FROZEN BANNED DEACTIVATED"
+  }
+  CompanyMember {
+    uuid id PK
+    uuid companyId FK
+    uuid userId FK
+    enum role "HR INTERVIEWER"
+    bool active
+  }
+  CompanyRequest {
+    uuid id PK
+    uuid companyId FK "set on approval"
+    string companyName
+    string hrEmail
+    string roleTitle
+    float ctcLpa
+    enum status "PENDING_EMAIL PENDING_CHECKS IN_REVIEW NEEDS_INFO APPROVED REJECTED"
+    enum risk "LOW MEDIUM HIGH"
+    int trustScore
+  }
+  CompanyCheck {
+    uuid id PK
+    uuid requestId FK
+    string kind "domain mx rdap crawl phone lookalike scam"
+    enum result "PASS WARN FAIL ERROR"
+    json details
+  }
+  CompanyCallback {
+    uuid id PK
+    uuid requestId FK
+    string calledNumber "from official website"
+    enum outcome "CONFIRMED NOT_CONFIRMED NO_ANSWER"
+  }
+  CompanyReport {
+    uuid id PK
+    uuid companyId FK
+    uuid studentId FK
+    string reason
+    enum status "OPEN ACTIONED DISMISSED"
+  }
+  CompanyFaq {
+    uuid id PK
+    uuid companyId FK
+    string question
+    string answer
+  }
+  </pre></div>
+  <ul class="notes">
+    <li>A request from the Company Portal stays separate from the company itself, so rejected or fake requests never become companies.</li>
+    <li><code>CompanyCheck</code> rows are the automatic trust report; <code>CompanyCallback</code> records the staff phone call.</li>
+  </ul>
+</section>
+
+<section id="students">
+  <h2>Students & verification</h2>
+  <div class="diagram"><pre class="mermaid">
+erDiagram
+  User ||--o| StudentProfile : "is"
+  StudentProfile ||--o{ AcademicRecord : "versions"
+  StudentProfile ||--o{ StudentDocument : uploads
+  FileObject ||--o{ StudentDocument : stores
+  ImportBatch ||--o{ ImportRow : contains
+  ReviewTask ||--o{ ReviewTask : "second check"
+  StudentProfile {
+    uuid id PK
+    uuid userId FK
+    string rollNo UK
+    string branch
+    int batch
+    enum status "PROFILE_INCOMPLETE PENDING_VERIFICATION VERIFIED REJECTED"
+    float cgpa "verified value"
+    int activeBacklogs "verified value"
+    float tenthPercent
+    float twelfthPercent
+    enum placementStatus "NOT_PLACED PLACED"
+    int noShowCount
+  }
+  AcademicRecord {
+    uuid id PK
+    uuid studentId FK
+    float cgpa "as submitted"
+    int activeBacklogs
+    enum source "SELF OFFICIAL_SHEET TPO"
+    enum status "PENDING VERIFIED REJECTED SUPERSEDED"
+    uuid verifiedById
+  }
+  StudentDocument {
+    uuid id PK
+    uuid studentId FK
+    uuid fileId FK
+    enum type "MARKSHEET_10 MARKSHEET_12 SEMESTER_MARKSHEET"
+    enum status "UPLOADED MATCHED MISMATCH ACCEPTED REJECTED SUPERSEDED"
+    json flags "duplicate, pdf values"
+  }
+  ImportBatch {
+    uuid id PK
+    enum kind "OFFICIAL_STUDENTS ROUND_RESULTS HISTORY"
+    uuid fileId FK
+    string fileSha256 "same file twice"
+    enum status "UPLOADED MAPPING PREVIEW APPLYING DONE FAILED"
+    json columnMapping
+    json summary
+  }
+  ImportRow {
+    uuid id PK
+    uuid importId FK
+    int rowNumber
+    string rollNo
+    uuid studentId
+    enum result "MATCHED MISMATCH NOT_REGISTERED NOT_IN_SHEET INVALID"
+    json mismatches
+    enum resolution "ACCEPT_SHEET KEEP_PROFILE REJECTED"
+  }
+  ReviewTask {
+    uuid id PK
+    enum type "STUDENT_VERIFICATION ACADEMIC_UPDATE IMPORT_MISMATCH DUPLICATE_DOCUMENT COMPANY_REVIEW ..."
+    enum risk "LOW MEDIUM HIGH"
+    int priority
+    enum status "OPEN CLAIMED DECIDED AWAITING_SECOND_CHECK ESCALATED CLOSED REOPENED"
+    string subjectType
+    string subjectId
+    uuid claimedById
+    datetime claimedUntil "15 min lock"
+    uuid parentTaskId FK
+  }
+  </pre></div>
+  <ul class="notes">
+    <li>Eligibility reads only the <strong>verified</strong> values on <code>StudentProfile</code>. What a student types is an <code>AcademicRecord</code> with status <code>PENDING</code>; a CGPA change request is just a new pending record.</li>
+    <li>Sheet imports go to <code>ImportRow</code> first (staging). Profiles change only when the TPO applies or resolves rows.</li>
+    <li><code>ReviewTask</code> is the shared work queue. <code>branch</code>/<code>batch</code>/<code>studentId</code> on the task let the system skip a volunteer's own batch.</li>
+  </ul>
+</section>
+
+<section id="drives">
+  <h2>Drives, rounds, attendance & results</h2>
+  <div class="diagram"><pre class="mermaid">
+erDiagram
+  Company ||--o{ Drive : runs
+  Drive ||--o{ Round : has
+  Drive ||--o{ Participation : has
+  Drive ||--o{ DriveCoordinator : "helped by"
+  StudentProfile ||--o{ Participation : joins
+  Round ||--o{ AttendanceSession : "check-in windows"
+  AttendanceSession ||--o{ Attendance : "QR scans"
+  Round ||--o{ Attendance : records
+  Participation ||--o{ Attendance : "present in"
+  Round ||--o{ RoundResult : records
+  Participation ||--o{ RoundResult : gets
+  Drive {
+    uuid id PK
+    uuid companyId FK
+    string roleTitle
+    enum jobType "FULL_TIME INTERNSHIP INTERNSHIP_PPO"
+    float ctcLpa
+    enum status "DRAFT PENDING_APPROVAL PUBLISHED ONGOING RESULTS_DECLARED CLOSED"
+    datetime optInDeadline
+    bool showSelectedList
+    json eligibility "filters HR used"
+  }
+  Round {
+    uuid id PK
+    uuid driveId FK
+    int sequence "unique per drive"
+    enum type "PPT OA GD TECHNICAL_INTERVIEW HR_INTERVIEW OTHER"
+    enum mode "OFFLINE ONLINE"
+    datetime startsAt
+    float venueLat
+    float venueLng
+    int venueRadiusM
+    enum status "SCHEDULED IN_PROGRESS RESULTS_PENDING RESULTS_PUBLISHED"
+  }
+  Participation {
+    uuid id PK
+    uuid driveId FK
+    uuid studentId FK
+    enum status "INVITED OPTED_IN OPTED_OUT EXPIRED ELIMINATED NO_SHOW SELECTED OFFERED PLACED"
+    datetime consentAt "opt-in = consent"
+    uuid eliminatedAtRoundId
+  }
+  AttendanceSession {
+    uuid id PK
+    uuid roundId FK
+    string qrSecret "rotating codes"
+    enum status "OPEN CLOSED"
+  }
+  Attendance {
+    uuid id PK
+    uuid roundId FK
+    uuid participationId FK
+    enum method "QR MANUAL"
+    string reason "required if manual"
+    int distanceM
+  }
+  RoundResult {
+    uuid id PK
+    uuid roundId FK
+    uuid participationId FK
+    enum result "PENDING SELECTED REJECTED ON_HOLD"
+    enum source "MANUAL IMPORT"
+  }
+  </pre></div>
+  <ul class="notes">
+    <li><code>Participation</code> is the centre: one row per student per drive, from invitation to placement. One student can't be invited twice to the same drive.</li>
+    <li>Attendance and results are unique per round + participant, so a double tap or a re-import can't create duplicates.</li>
+  </ul>
+</section>
+
+<section id="interviews">
+  <h2>Interviews & the waiting line</h2>
+  <div class="diagram"><pre class="mermaid">
+erDiagram
+  Round ||--o{ Panel : has
+  Panel ||--o{ PanelMember : "interviewers"
+  User ||--o{ PanelMember : "sits on"
+  Panel ||--o{ QueueEntry : "line"
+  Participation ||--o{ QueueEntry : "waits in"
+  QueueEntry ||--o| InterviewSession : "becomes"
+  Participation ||--o{ Feedback : receives
+  Panel {
+    uuid id PK
+    uuid roundId FK
+    string name
+    string location
+  }
+  QueueEntry {
+    uuid id PK
+    uuid panelId FK
+    uuid participationId FK
+    int position
+    enum status "WAITING CALLED IN_INTERVIEW DONE SKIPPED ABSENT"
+    int skipCount
+  }
+  InterviewSession {
+    uuid id PK
+    uuid queueEntryId FK
+    uuid interviewerId
+    datetime startedAt
+    datetime endedAt "for wait estimates"
+    string privateNotes "company + TPO only"
+    enum recommendation "SELECT REJECT HOLD"
+  }
+  Feedback {
+    uuid id PK
+    uuid participationId FK
+    string text "from interviewer"
+    enum status "PENDING_REVIEW RELEASED EDITED_AND_RELEASED WITHHELD"
+    string releasedText "what the student sees"
+  }
+  </pre></div>
+  <ul class="notes">
+    <li>The live order is also kept in Redis for speed; <code>QueueEntry</code> is the permanent record.</li>
+    <li>Start and end times of past interviews give each student an estimated wait.</li>
+    <li>Private notes and student-facing feedback are separate tables, so a note can never leak to a student by mistake.</li>
+  </ul>
+</section>
+
+<section id="offers">
+  <h2>Offers & placement records</h2>
+  <div class="diagram"><pre class="mermaid">
+erDiagram
+  Participation ||--o| Offer : "may get"
+  Drive ||--o{ Offer : issues
+  Company ||--o{ Offer : sends
+  StudentProfile ||--o{ Offer : receives
+  FileObject ||--o{ Offer : "letter file"
+  Offer ||--o| PlacementRecord : "accepted becomes"
+  StudentProfile ||--o{ PlacementRecord : "placed in"
+  Company ||--o{ PlacementRecord : hired
+  Offer {
+    uuid id PK
+    uuid participationId FK "one offer per participation"
+    uuid fileId FK
+    float ctcLpa
+    enum status "SENT ACCEPTED DECLINED EXPIRED REVOKED"
+    datetime respondBy
+  }
+  PlacementRecord {
+    uuid id PK
+    uuid studentId FK "null for old imports"
+    uuid companyId FK
+    uuid offerId FK
+    string companyName "kept as text"
+    string roleTitle
+    float ctcLpa
+    string branch
+    int batch
+    enum source "APP HISTORY_IMPORT"
+  }
+  </pre></div>
+  <ul class="notes">
+    <li>Offer letters are files with short-lived links; only the student, that company's HR and the TPO can open them.</li>
+    <li><code>PlacementRecord</code> keeps company and student details as text too, so statistics survive even for old records imported from sheets or deleted accounts.</li>
+  </ul>
+</section>
+
+<section id="platform">
+  <h2>Notifications, webhooks & platform</h2>
+  <div class="diagram"><pre class="mermaid">
+erDiagram
+  User ||--o{ Device : "phones"
+  User ||--o{ Notification : receives
+  User ||--o| NotificationPrefs : sets
+  Drive ||--o{ Announcement : "posted in"
+  WebhookSubscription ||--o{ WebhookDelivery : sends
+  User ||--o{ Job : "started"
+  User ||--o{ AuditLog : "acted"
+  Device {
+    uuid id PK
+    uuid userId FK
+    enum platform "ANDROID IOS DESKTOP WEB"
+    string token UK "FCM"
+  }
+  Notification {
+    uuid id PK
+    uuid userId FK
+    enum channel "QUEUE DRIVES OFFERS GENERAL"
+    string title
+    string link
+    datetime readAt
+  }
+  NotificationPrefs {
+    uuid userId PK
+    json channels
+    int quietHoursStart
+    datetime whatsappConsentAt
+  }
+  WebhookSubscription {
+    uuid id PK
+    string url
+    string secretEnc "signing secret"
+    string_array eventTypes
+    bool active
+  }
+  WebhookDelivery {
+    uuid id PK
+    uuid subscriptionId FK
+    uuid eventId "unique per subscription"
+    enum status "PENDING DELIVERED RETRYING FAILED"
+    int attempts
+  }
+  OutboxEvent {
+    uuid id PK
+    string type
+    json data
+    datetime publishedAt "set by relay"
+  }
+  Job {
+    uuid id PK
+    string queue
+    enum status "QUEUED RUNNING DONE FAILED CANCELLED"
+    int progress
+    json result
+  }
+  AuditLog {
+    uuid id PK
+    uuid actorId FK
+    string action
+    string entityType
+    string entityId
+    json before
+    json after
+  }
+  </pre></div>
+  <ul class="notes">
+    <li>Every push also writes a <code>Notification</code> row, so the in-app list is complete even when a push is lost.</li>
+    <li><code>OutboxEvent</code> is written in the same transaction as each change; the relay moves it to the queues.</li>
+  </ul>
+</section>
+
+<footer>Draft of 7 November 2026. Approve it, and the migration is created from this schema.</footer>
+</div>

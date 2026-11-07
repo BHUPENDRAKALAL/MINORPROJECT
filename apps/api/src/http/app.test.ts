@@ -11,6 +11,7 @@ const env = loadEnv({
   NODE_ENV: "test",
   DATABASE_URL: "postgresql://x:y@localhost:5432/test",
   REDIS_URL: "redis://localhost:6379",
+  APP_SECRET: "test-secret-test-secret-test-secret-1234",
 });
 const log = createLogger(env, "test");
 const app = buildApp({ env, log });
@@ -45,6 +46,15 @@ describe("HTTP app", () => {
 describe("defineRoute", () => {
   it("refuses a route with an invalid weight class", () => {
     const bad = { method: "get", path: "/x", routeClass: "MEDIUM", summary: "", tags: [], responses: {}, handler: () => ({}) };
-    expect(() => mountRoutes(express.Router(), new OpenAPIRegistry(), "/api/v1", [bad as unknown as RouteDef])).toThrow(/routeClass/);
+    expect(() =>
+      mountRoutes(express.Router(), new OpenAPIRegistry(), "/api/v1", [bad as unknown as RouteDef], { appSecret: env.APP_SECRET }),
+    ).toThrow(/routeClass/);
+  });
+
+  it("refuses a route without an access rule", () => {
+    const bad = { method: "get", path: "/x", routeClass: "LIGHT", summary: "", tags: [], responses: {}, handler: () => ({}) };
+    expect(() =>
+      mountRoutes(express.Router(), new OpenAPIRegistry(), "/api/v1", [bad as unknown as RouteDef], { appSecret: env.APP_SECRET }),
+    ).toThrow(/access/);
   });
 });

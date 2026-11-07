@@ -1,7 +1,12 @@
-// PlaceSync database schema.
-// This first version holds only the platform tables every module relies on:
-// users + roles, the outbox (events), background jobs and the audit log.
-// Feature tables (companies, students, drives, rounds, ...) are added module by module.
+// Cyrus database schema (P0 modules + a few P1 tables).
+// Design: BACKEND-DESIGN.md (states §3, verification §4, review team §4b, company checks §4c, push §5b).
+//
+// Conventions
+// - Primary keys are UUIDs. Times are UTC.
+// - "…ById" columns that only record who acted are plain UUIDs (the audit log has the full story);
+//   real relations are kept where the app navigates them.
+// - Status columns use enums that match the state machines in the design doc.
+// - CGPA, percentages and CTC (in LPA) are Float: two decimals are enough and JSON stays simple.
 
 generator client {
   provider = "prisma-client"
@@ -11,6 +16,8 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+// ───────────────────────────── Identity ─────────────────────────────
 
 enum Role {
   TPO
@@ -32,35 +39,1152 @@ enum AccountStatus {
 
 /// One login. A person can hold several roles (e.g. a volunteer is also a student).
 model User {
-  id            String        @id @default(uuid()) @db.Uuid
-  email         String        @unique
-  emailVerified Boolean       @default(false)
-  passwordHash  String?
-  status        AccountStatus @default(ACTIVE)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id               String        @id @default(uuid()) @db.Uuid
+  email            String        @unique
+  emailVerifiedAt  DateTime?
+  passwordHash     String?
+  name             String?
+  phone            String?
+  status           AccountStatus @default(ACTIVE)
+  /// Review team: confidentiality pledge accepted (BACKEND-DESIGN §4b)
+  pledgeAcceptedAt DateTime?
+  /// 2-step login secret for TPO/staff (encrypted), null = off
+  totpSecretEnc    String?
+  lastLoginAt      DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
-  roles     RoleGrant[]
-  jobs      Job[]
-  auditLogs AuditLog[]
+  roles             RoleGrant[]
+  sessions          Session[]
+  jobs              Job[]
+  auditLogs         AuditLog[]
+  student           StudentProfile?
+  companyMembers    CompanyMember[]
+  devices           Device[]
+  notifications     Notification[]
+  notificationPrefs NotificationPrefs?
+  panelMemberships  PanelMember[]
+  driveCoordinators DriveCoordinator[]
+  files             FileObject[]
 }
 
-/// A role given to a user, optionally with capabilities, a scope and an end date
-/// (used for staff and volunteers, BACKEND-DESIGN.md §4b).
+/// A role given to a user, with capabilities, a scope and an end date (staff/volunteers).
 model RoleGrant {
   id           String    @id @default(uuid()) @db.Uuid
   userId       String    @db.Uuid
   role         Role
   capabilities String[]
-  /// e.g. {"branches":["CSE"],"batches":[2026]} or {"companyId":"..."}
+  /// e.g. {"branches":["CSE"],"batches":[2026]}
   scope        Json?
   expiresAt    DateTime?
+  grantedById  String?   @db.Uuid
   createdAt    DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, role])
 }
+
+/// Refresh-token session. The token itself is never stored, only its hash.
+model Session {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @db.Uuid
+  tokenHash    String    @unique
+  userAgent    String?
+  ip           String?
+  createdAt    DateTime  @default(now())
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  replacedById String?   @db.Uuid
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum OtpPurpose {
+  STUDENT_SIGNUP
+  COMPANY_REQUEST
+  PASSWORD_RESET
+}
+
+/// One-time email codes. Only the hash is stored; limited attempts.
+model EmailOtp {
+  id         String     @id @default(uuid()) @db.Uuid
+  email      String
+  purpose    OtpPurpose
+  codeHash   String
+  attempts   Int        @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime   @default(now())
+
+  @@index([email, purpose, createdAt])
+}
+
+enum InviteStatus {
+  SENT
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+/// Invite link for HR, interviewers, coordinators, staff and volunteers.
+model Invite {
+  id           String       @id @default(uuid()) @db.Uuid
+  email        String
+  role         Role
+  capabilities String[]
+  scope        Json?
+  companyId    String?      @db.Uuid
+  tokenHash    String       @unique
+  status       InviteStatus @default(SENT)
+  invitedById  String?      @db.Uuid
+  expiresAt    DateTime
+  acceptedAt   DateTime?
+  userId       String?      @db.Uuid
+  createdAt    DateTime     @default(now())
+
+  company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([email])
+}
+
+// ───────────────────────────── Files ─────────────────────────────
+
+enum FileKind {
+  MARKSHEET
+  RESUME
+  PHOTO
+  JD
+  OFFER_LETTER
+  IMPORT_SHEET
+  OTHER
+}
+
+enum ScanStatus {
+  PENDING
+  CLEAN
+  INFECTED
+  FAILED
+}
+
+/// Every uploaded file. Stored privately; downloads go through short-lived links.
+model FileObject {
+  id           String     @id @default(uuid()) @db.Uuid
+  ownerId      String?    @db.Uuid
+  kind         FileKind
+  storageKey   String     @unique
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  /// SHA-256 of the content: finds the same file uploaded by two students
+  sha256       String
+  scanStatus   ScanStatus @default(PENDING)
+  createdAt    DateTime   @default(now())
+
+  owner User? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
+  studentDocuments StudentDocument[]
+  offers           Offer[]
+
+  @@index([sha256])
+}
+
+// ───────────────────────────── Policies ─────────────────────────────
+
+/// College-wide placement rules set by the TPO. A single row with id "default".
+model PlacementPolicy {
+  id                        String   @id @default("default")
+  /// A placed student can't join more drives…
+  blockPlacedStudents       Boolean  @default(true)
+  /// …unless the new drive's CTC is at least this (dream offer). Null = no exception.
+  dreamOfferMinCtcLpa       Float?
+  noShowWarnAfter           Int      @default(1)
+  noShowBlockAfter          Int      @default(2)
+  showSelectedListByDefault Boolean  @default(false)
+  offerResponseDays         Int      @default(7)
+  updatedById               String?  @db.Uuid
+  updatedAt                 DateTime @updatedAt
+}
+
+// ───────────────────────────── Companies ─────────────────────────────
+
+enum CompanyStatus {
+  APPROVED
+  FROZEN
+  BANNED
+  DEACTIVATED
+}
+
+model Company {
+  id            String        @id @default(uuid()) @db.Uuid
+  name          String
+  website       String?
+  /// Main email/website domain, e.g. "infosys.com"
+  domain        String?       @unique
+  industry      String?
+  about         String?
+  address       String?
+  cin           String?
+  gstin         String?
+  officialPhone String?
+  status        CompanyStatus @default(APPROVED)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  members    CompanyMember[]
+  requests   CompanyRequest[]
+  invites    Invite[]
+  drives     Drive[]
+  reports    CompanyReport[]
+  faqs       CompanyFaq[]
+  offers     Offer[]
+  placements PlacementRecord[]
+}
+
+enum CompanyMemberRole {
+  HR
+  INTERVIEWER
+}
+
+model CompanyMember {
+  id          String            @id @default(uuid()) @db.Uuid
+  companyId   String            @db.Uuid
+  userId      String            @db.Uuid
+  role        CompanyMemberRole
+  active      Boolean           @default(true)
+  invitedById String?           @db.Uuid
+  createdAt   DateTime          @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, userId])
+}
+
+enum CompanyRequestStatus {
+  PENDING_EMAIL
+  PENDING_CHECKS
+  IN_REVIEW
+  NEEDS_INFO
+  APPROVED
+  REJECTED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+/// A registration from the Company Portal (new company, or a known company's first JD).
+model CompanyRequest {
+  id               String               @id @default(uuid()) @db.Uuid
+  companyId        String?              @db.Uuid
+  companyName      String
+  website          String?
+  domain           String?
+  industry         String?
+  about            String?
+  address          String?
+  cin              String?
+  gstin            String?
+  officialPhone    String?
+  hrName           String
+  hrDesignation    String?
+  hrEmail          String
+  hrPhone          String?
+  roleTitle        String
+  ctcLpa           Float?
+  stipendMonthly   Int?
+  location         String?
+  eligibilityNotes String?
+  tentativeDates   String?
+  jdFileId         String?              @db.Uuid
+  status           CompanyRequestStatus @default(PENDING_EMAIL)
+  emailVerifiedAt  DateTime?
+  risk             RiskLevel?
+  trustScore       Int?
+  decisionReason   String?
+  decidedById      String?              @db.Uuid
+  decidedAt        DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  company   Company?          @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  checks    CompanyCheck[]
+  callbacks CompanyCallback[]
+
+  @@index([status, createdAt])
+}
+
+enum CheckResult {
+  PASS
+  WARN
+  FAIL
+  ERROR
+}
+
+/// One automatic check in the trust report (domain match, MX, RDAP age, crawl, phone, lookalike, scam words…).
+model CompanyCheck {
+  id        String      @id @default(uuid()) @db.Uuid
+  requestId String      @db.Uuid
+  kind      String
+  result    CheckResult
+  details   Json?
+  createdAt DateTime    @default(now())
+
+  request CompanyRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+}
+
+enum CallbackOutcome {
+  CONFIRMED
+  NOT_CONFIRMED
+  NO_ANSWER
+}
+
+/// Staff called the number listed on the company's official website.
+model CompanyCallback {
+  id           String          @id @default(uuid()) @db.Uuid
+  requestId    String          @db.Uuid
+  calledNumber String
+  outcome      CallbackOutcome
+  notes        String?
+  staffId      String          @db.Uuid
+  createdAt    DateTime        @default(now())
+
+  request CompanyRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+}
+
+enum ReportStatus {
+  OPEN
+  ACTIONED
+  DISMISSED
+}
+
+/// A student reports a suspicious company (e.g. asked for money).
+model CompanyReport {
+  id        String       @id @default(uuid()) @db.Uuid
+  companyId String       @db.Uuid
+  studentId String       @db.Uuid
+  reason    String
+  details   String?
+  status    ReportStatus @default(OPEN)
+  createdAt DateTime     @default(now())
+
+  company Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+}
+
+// ───────────────────────────── Students ─────────────────────────────
+
+enum StudentStatus {
+  PROFILE_INCOMPLETE
+  PENDING_VERIFICATION
+  VERIFIED
+  REJECTED
+}
+
+enum PlacementStatus {
+  NOT_PLACED
+  PLACED
+}
+
+/// Student profile. The academic values here are the VERIFIED ones (used by eligibility);
+/// what the student typed lives in AcademicRecord until it is verified.
+model StudentProfile {
+  id              String          @id @default(uuid()) @db.Uuid
+  userId          String          @unique @db.Uuid
+  rollNo          String          @unique
+  name            String
+  branch          String
+  batch           Int
+  degree          String?
+  gender          String?
+  status          StudentStatus   @default(PROFILE_INCOMPLETE)
+  rejectionReason String?
+  verifiedAt      DateTime?
+  // Verified academic snapshot (null until verified)
+  cgpa            Float?
+  activeBacklogs  Int?
+  totalBacklogs   Int?
+  tenthPercent    Float?
+  twelfthPercent  Float?
+  diplomaPercent  Float?
+  // Non-academic, freely editable
+  skills          String[]
+  links           Json?
+  photoFileId     String?         @db.Uuid
+  resumeFileId    String?         @db.Uuid
+  placementStatus PlacementStatus @default(NOT_PLACED)
+  noShowCount     Int             @default(0)
+  blockedUntil    DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  academicRecords AcademicRecord[]
+  documents       StudentDocument[]
+  participations  Participation[]
+  offers          Offer[]
+  placements      PlacementRecord[]
+  companyReports  CompanyReport[]
+
+  @@index([branch, batch, status])
+  @@index([cgpa])
+}
+
+enum AcademicSource {
+  SELF
+  OFFICIAL_SHEET
+  TPO
+}
+
+enum AcademicStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  SUPERSEDED
+}
+
+/// Every version of a student's academic values. A pending row = an update request.
+model AcademicRecord {
+  id             String         @id @default(uuid()) @db.Uuid
+  studentId      String         @db.Uuid
+  cgpa           Float
+  activeBacklogs Int
+  totalBacklogs  Int
+  tenthPercent   Float?
+  twelfthPercent Float?
+  diplomaPercent Float?
+  semester       Int?
+  source         AcademicSource @default(SELF)
+  status         AcademicStatus @default(PENDING)
+  reason         String?
+  verifiedById   String?        @db.Uuid
+  verifiedAt     DateTime?
+  createdAt      DateTime       @default(now())
+
+  student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, createdAt])
+}
+
+enum DocumentType {
+  MARKSHEET_10
+  MARKSHEET_12
+  DIPLOMA
+  SEMESTER_MARKSHEET
+  OTHER
+}
+
+enum DocumentStatus {
+  UPLOADED
+  CHECKING
+  MATCHED
+  MISMATCH
+  UNREADABLE
+  ACCEPTED
+  REJECTED
+  SUPERSEDED
+}
+
+model StudentDocument {
+  id        String         @id @default(uuid()) @db.Uuid
+  studentId String         @db.Uuid
+  fileId    String         @db.Uuid
+  type      DocumentType
+  semester  Int?
+  status    DocumentStatus @default(UPLOADED)
+  /// e.g. {"duplicateOf":"<studentId>","pdfCgpa":8.12}
+  flags     Json?
+  createdAt DateTime       @default(now())
+
+  student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  file    FileObject     @relation(fields: [fileId], references: [id])
+
+  @@index([studentId])
+}
+
+// ───────────────────────────── Imports & matching ─────────────────────────────
+
+enum ImportKind {
+  OFFICIAL_STUDENTS
+  ROUND_RESULTS
+  HISTORY
+}
+
+enum ImportStatus {
+  UPLOADED
+  MAPPING
+  PREVIEW
+  APPLYING
+  DONE
+  FAILED
+}
+
+model ImportBatch {
+  id            String       @id @default(uuid()) @db.Uuid
+  kind          ImportKind
+  fileId        String       @db.Uuid
+  /// Same file imported twice → recognised by this hash
+  fileSha256    String
+  status        ImportStatus @default(UPLOADED)
+  columnMapping Json?
+  /// Counts per result, filled after matching
+  summary       Json?
+  roundId       String?      @db.Uuid
+  jobId         String?      @db.Uuid
+  createdById   String       @db.Uuid
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  rows ImportRow[]
+}
+
+enum ImportRowResult {
+  MATCHED
+  MISMATCH
+  NOT_REGISTERED
+  NOT_IN_SHEET
+  INVALID
+}
+
+enum ImportResolution {
+  ACCEPT_SHEET
+  KEEP_PROFILE
+  REJECTED
+}
+
+model ImportRow {
+  id           String            @id @default(uuid()) @db.Uuid
+  importId     String            @db.Uuid
+  rowNumber    Int
+  raw          Json
+  rollNo       String?
+  studentId    String?           @db.Uuid
+  result       ImportRowResult
+  /// e.g. [{"field":"cgpa","sheet":8.1,"profile":8.4}]
+  mismatches   Json?
+  resolution   ImportResolution?
+  resolvedById String?           @db.Uuid
+  resolvedAt   DateTime?
+
+  import ImportBatch @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  @@unique([importId, rowNumber])
+  @@index([importId, result])
+}
+
+// ───────────────────────────── Review team work queue ─────────────────────────────
+
+enum TaskType {
+  STUDENT_VERIFICATION
+  ACADEMIC_UPDATE
+  IMPORT_MISMATCH
+  DUPLICATE_DOCUMENT
+  COMPANY_REVIEW
+  COMPANY_REPORT
+  SECOND_CHECK
+  FEEDBACK_REVIEW
+  RESULT_CONCERN
+}
+
+enum TaskStatus {
+  OPEN
+  CLAIMED
+  DECIDED
+  AWAITING_SECOND_CHECK
+  ESCALATED
+  CLOSED
+  REOPENED
+}
+
+enum TaskDecision {
+  APPROVE
+  REJECT
+}
+
+/// One piece of human work. Reviewers take the next allowed task ("get next") with a 15-minute lock.
+model ReviewTask {
+  id             String        @id @default(uuid()) @db.Uuid
+  type           TaskType
+  risk           RiskLevel     @default(LOW)
+  /// Higher = sooner. Computed from drive deadlines, escalations and risk.
+  priority       Int           @default(0)
+  status         TaskStatus    @default(OPEN)
+  subjectType    String
+  subjectId      String
+  /// For conflict rules and scope filters (who may take it)
+  studentId      String?       @db.Uuid
+  branch         String?
+  batch          Int?
+  claimedById    String?       @db.Uuid
+  claimedUntil   DateTime?
+  decidedById    String?       @db.Uuid
+  decision       TaskDecision?
+  reasonCode     String?
+  note           String?
+  escalationNote String?
+  parentTaskId   String?       @db.Uuid
+  dueAt          DateTime?
+  createdAt      DateTime      @default(now())
+  decidedAt      DateTime?
+  closedAt       DateTime?
+
+  parent   ReviewTask?  @relation("SecondCheck", fields: [parentTaskId], references: [id], onDelete: SetNull)
+  children ReviewTask[] @relation("SecondCheck")
+
+  @@index([status, priority(sort: Desc), createdAt])
+  @@index([subjectType, subjectId])
+  @@index([claimedById])
+}
+
+// ───────────────────────────── Drives & rounds ─────────────────────────────
+
+enum JobType {
+  FULL_TIME
+  INTERNSHIP
+  INTERNSHIP_PPO
+}
+
+enum DriveStatus {
+  DRAFT
+  PENDING_APPROVAL
+  PUBLISHED
+  ONGOING
+  RESULTS_DECLARED
+  CLOSED
+  REJECTED
+  CANCELLED
+}
+
+model Drive {
+  id               String      @id @default(uuid()) @db.Uuid
+  companyId        String      @db.Uuid
+  createdById      String      @db.Uuid
+  title            String
+  roleTitle        String
+  description      String
+  jobType          JobType     @default(FULL_TIME)
+  ctcLpa           Float?
+  stipendMonthly   Int?
+  location         String?
+  bondMonths       Int?
+  jdFileId         String?     @db.Uuid
+  status           DriveStatus @default(DRAFT)
+  optInDeadline    DateTime?
+  showSelectedList Boolean     @default(false)
+  /// Filters HR used to pick eligible students (kept for history)
+  eligibility      Json?
+  approvedById     String?     @db.Uuid
+  approvedAt       DateTime?
+  rejectionReason  String?
+  closedAt         DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  company        Company            @relation(fields: [companyId], references: [id])
+  rounds         Round[]
+  participations Participation[]
+  coordinators   DriveCoordinator[]
+  announcements  Announcement[]
+  offers         Offer[]
+
+  @@index([companyId, status])
+  @@index([status, optInDeadline])
+}
+
+model DriveCoordinator {
+  driveId   String   @db.Uuid
+  userId    String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  drive Drive @relation(fields: [driveId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([driveId, userId])
+}
+
+enum RoundType {
+  PPT
+  OA
+  GD
+  TECHNICAL_INTERVIEW
+  HR_INTERVIEW
+  OTHER
+}
+
+enum RoundMode {
+  OFFLINE
+  ONLINE
+}
+
+enum RoundStatus {
+  SCHEDULED
+  IN_PROGRESS
+  RESULTS_PENDING
+  RESULTS_PUBLISHED
+  CANCELLED
+}
+
+model Round {
+  id                 String      @id @default(uuid()) @db.Uuid
+  driveId            String      @db.Uuid
+  sequence           Int
+  type               RoundType
+  title              String
+  mode               RoundMode   @default(OFFLINE)
+  startsAt           DateTime
+  endsAt             DateTime?
+  venue              String?
+  venueLat           Float?
+  venueLng           Float?
+  venueRadiusM       Int?        @default(150)
+  onlineLink         String?
+  instructions       String?
+  status             RoundStatus @default(SCHEDULED)
+  resultsPublishedAt DateTime?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  drive              Drive               @relation(fields: [driveId], references: [id], onDelete: Cascade)
+  attendanceSessions AttendanceSession[]
+  attendance         Attendance[]
+  results            RoundResult[]
+  panels             Panel[]
+
+  @@unique([driveId, sequence])
+  @@index([startsAt])
+}
+
+enum ParticipationStatus {
+  INVITED
+  OPTED_IN
+  OPTED_OUT
+  EXPIRED
+  ELIMINATED
+  NO_SHOW
+  SELECTED
+  OFFERED
+  PLACED
+  OFFER_DECLINED
+  REMOVED
+}
+
+/// One student in one drive, from invitation to placement.
+model Participation {
+  id                  String              @id @default(uuid()) @db.Uuid
+  driveId             String              @db.Uuid
+  studentId           String              @db.Uuid
+  status              ParticipationStatus @default(INVITED)
+  invitedById         String?             @db.Uuid
+  invitedAt           DateTime            @default(now())
+  respondedAt         DateTime?
+  /// Opt-in = consent to share resume and contact details with the company
+  consentAt           DateTime?
+  eliminatedAtRoundId String?             @db.Uuid
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  drive        Drive          @relation(fields: [driveId], references: [id], onDelete: Cascade)
+  student      StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  attendance   Attendance[]
+  results      RoundResult[]
+  queueEntries QueueEntry[]
+  feedback     Feedback[]
+  offer        Offer?
+
+  @@unique([driveId, studentId])
+  @@index([studentId, status])
+  @@index([driveId, status])
+}
+
+// ───────────────────────────── Attendance ─────────────────────────────
+
+enum SessionStatus {
+  OPEN
+  CLOSED
+}
+
+/// An open check-in at a venue. QR codes are derived from `qrSecret` and rotate every ~15 s.
+model AttendanceSession {
+  id         String        @id @default(uuid()) @db.Uuid
+  roundId    String        @db.Uuid
+  openedById String        @db.Uuid
+  status     SessionStatus @default(OPEN)
+  qrSecret   String
+  venueLat   Float?
+  venueLng   Float?
+  radiusM    Int?
+  openedAt   DateTime      @default(now())
+  closedAt   DateTime?
+
+  round      Round        @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  attendance Attendance[]
+}
+
+enum AttendanceMethod {
+  QR
+  MANUAL
+}
+
+model Attendance {
+  id              String           @id @default(uuid()) @db.Uuid
+  roundId         String           @db.Uuid
+  participationId String           @db.Uuid
+  sessionId       String?          @db.Uuid
+  method          AttendanceMethod
+  markedById      String?          @db.Uuid
+  /// Required for manual marking
+  reason          String?
+  lat             Float?
+  lng             Float?
+  distanceM       Int?
+  createdAt       DateTime         @default(now())
+
+  round         Round              @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  participation Participation      @relation(fields: [participationId], references: [id], onDelete: Cascade)
+  session       AttendanceSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@unique([roundId, participationId])
+}
+
+// ───────────────────────────── Results ─────────────────────────────
+
+enum ResultValue {
+  PENDING
+  SELECTED
+  REJECTED
+  ON_HOLD
+}
+
+enum ResultSource {
+  MANUAL
+  IMPORT
+}
+
+model RoundResult {
+  id              String       @id @default(uuid()) @db.Uuid
+  roundId         String       @db.Uuid
+  participationId String       @db.Uuid
+  result          ResultValue  @default(PENDING)
+  source          ResultSource @default(MANUAL)
+  setById         String?      @db.Uuid
+  updatedAt       DateTime     @updatedAt
+
+  round         Round         @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  participation Participation @relation(fields: [participationId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, participationId])
+}
+
+// ───────────────────────────── Interviews & live queue ─────────────────────────────
+
+model Panel {
+  id        String   @id @default(uuid()) @db.Uuid
+  roundId   String   @db.Uuid
+  name      String
+  location  String?
+  createdAt DateTime @default(now())
+
+  round    Round              @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  members  PanelMember[]
+  queue    QueueEntry[]
+  sessions InterviewSession[]
+}
+
+model PanelMember {
+  panelId String @db.Uuid
+  userId  String @db.Uuid
+
+  panel Panel @relation(fields: [panelId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([panelId, userId])
+}
+
+enum QueueStatus {
+  WAITING
+  CALLED
+  IN_INTERVIEW
+  DONE
+  SKIPPED
+  ABSENT
+}
+
+/// Permanent record of the line. The live order is also kept in Redis for speed.
+model QueueEntry {
+  id              String      @id @default(uuid()) @db.Uuid
+  panelId         String      @db.Uuid
+  participationId String      @db.Uuid
+  position        Int
+  status          QueueStatus @default(WAITING)
+  skipCount       Int         @default(0)
+  calledAt        DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  panel         Panel             @relation(fields: [panelId], references: [id], onDelete: Cascade)
+  participation Participation     @relation(fields: [participationId], references: [id], onDelete: Cascade)
+  session       InterviewSession?
+
+  @@unique([panelId, participationId])
+  @@index([panelId, status, position])
+}
+
+enum Recommendation {
+  SELECT
+  REJECT
+  HOLD
+}
+
+model InterviewSession {
+  id             String          @id @default(uuid()) @db.Uuid
+  queueEntryId   String          @unique @db.Uuid
+  panelId        String          @db.Uuid
+  interviewerId  String          @db.Uuid
+  startedAt      DateTime        @default(now())
+  endedAt        DateTime?
+  /// Visible to the company and the TPO only
+  privateNotes   String?
+  recommendation Recommendation?
+
+  queueEntry QueueEntry @relation(fields: [queueEntryId], references: [id], onDelete: Cascade)
+  panel      Panel      @relation(fields: [panelId], references: [id], onDelete: Cascade)
+}
+
+enum FeedbackStatus {
+  PENDING_REVIEW
+  RELEASED
+  EDITED_AND_RELEASED
+  WITHHELD
+}
+
+/// A remark meant for the student. The TPO reviews it before the student sees it.
+model Feedback {
+  id              String         @id @default(uuid()) @db.Uuid
+  participationId String         @db.Uuid
+  roundId         String?        @db.Uuid
+  authorId        String         @db.Uuid
+  text            String
+  status          FeedbackStatus @default(PENDING_REVIEW)
+  releasedText    String?
+  reviewedById    String?        @db.Uuid
+  reviewedAt      DateTime?
+  createdAt       DateTime       @default(now())
+
+  participation Participation @relation(fields: [participationId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+}
+
+// ───────────────────────────── Offers & placement records ─────────────────────────────
+
+enum OfferStatus {
+  SENT
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  REVOKED
+}
+
+model Offer {
+  id              String      @id @default(uuid()) @db.Uuid
+  driveId         String      @db.Uuid
+  participationId String      @unique @db.Uuid
+  studentId       String      @db.Uuid
+  companyId       String      @db.Uuid
+  fileId          String      @db.Uuid
+  roleTitle       String
+  ctcLpa          Float?
+  joiningDate     DateTime?
+  status          OfferStatus @default(SENT)
+  respondBy       DateTime
+  respondedAt     DateTime?
+  uploadedById    String      @db.Uuid
+  revokeReason    String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  drive         Drive            @relation(fields: [driveId], references: [id])
+  participation Participation    @relation(fields: [participationId], references: [id])
+  student       StudentProfile   @relation(fields: [studentId], references: [id])
+  company       Company          @relation(fields: [companyId], references: [id])
+  file          FileObject       @relation(fields: [fileId], references: [id])
+  placement     PlacementRecord?
+
+  @@index([studentId, status])
+}
+
+enum RecordSource {
+  APP
+  HISTORY_IMPORT
+}
+
+/// Final placement, kept for statistics and future batches (also filled from old sheets).
+model PlacementRecord {
+  id            String       @id @default(uuid()) @db.Uuid
+  studentId     String?      @db.Uuid
+  companyId     String?      @db.Uuid
+  offerId       String?      @unique @db.Uuid
+  /// Kept as text too, so old imported records survive without accounts
+  studentRollNo String?
+  companyName   String
+  roleTitle     String
+  ctcLpa        Float?
+  branch        String
+  batch         Int
+  placedAt      DateTime
+  source        RecordSource @default(APP)
+  createdAt     DateTime     @default(now())
+
+  student StudentProfile? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  company Company?        @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  offer   Offer?          @relation(fields: [offerId], references: [id], onDelete: SetNull)
+
+  @@index([batch, branch])
+  @@index([companyName])
+}
+
+model CompanyFaq {
+  id        String   @id @default(uuid()) @db.Uuid
+  companyId String   @db.Uuid
+  question  String
+  answer    String?
+  authorId  String?  @db.Uuid
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+// ───────────────────────────── Notifications ─────────────────────────────
+
+enum DevicePlatform {
+  ANDROID
+  IOS
+  DESKTOP
+  WEB
+}
+
+/// A phone/computer that can receive push (FCM token).
+model Device {
+  id         String         @id @default(uuid()) @db.Uuid
+  userId     String         @db.Uuid
+  platform   DevicePlatform
+  token      String         @unique
+  appVersion String?
+  lastSeenAt DateTime       @default(now())
+  createdAt  DateTime       @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum NotificationChannel {
+  QUEUE
+  DRIVES
+  OFFERS
+  GENERAL
+}
+
+/// In-app notification list. Every push also writes a row here, so nothing is lost.
+model Notification {
+  id        String              @id @default(uuid()) @db.Uuid
+  userId    String              @db.Uuid
+  channel   NotificationChannel
+  title     String
+  body      String
+  link      String?
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model NotificationPrefs {
+  userId            String    @id @db.Uuid
+  /// e.g. {"GENERAL":false}; missing channel = on
+  channels          Json?
+  quietHoursStart   Int?
+  quietHoursEnd     Int?
+  /// Consent to share the phone number with the WhatsApp team (webhooks)
+  whatsappConsentAt DateTime?
+  updatedAt         DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum Audience {
+  ALL_STUDENTS
+  DRIVE_PARTICIPANTS
+}
+
+model Announcement {
+  id        String   @id @default(uuid()) @db.Uuid
+  driveId   String?  @db.Uuid
+  authorId  String   @db.Uuid
+  audience  Audience
+  title     String
+  body      String
+  createdAt DateTime @default(now())
+
+  drive Drive? @relation(fields: [driveId], references: [id], onDelete: Cascade)
+}
+
+// ───────────────────────────── Webhooks ─────────────────────────────
+
+model WebhookSubscription {
+  id           String    @id @default(uuid()) @db.Uuid
+  name         String
+  url          String
+  /// Signing secret, encrypted with the app key (needed in plain form to sign)
+  secretEnc    String
+  eventTypes   String[]
+  active       Boolean   @default(true)
+  failureCount Int       @default(0)
+  disabledAt   DateTime?
+  createdById  String    @db.Uuid
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  deliveries WebhookDelivery[]
+}
+
+enum DeliveryStatus {
+  PENDING
+  DELIVERED
+  RETRYING
+  FAILED
+}
+
+model WebhookDelivery {
+  id             String         @id @default(uuid()) @db.Uuid
+  subscriptionId String         @db.Uuid
+  eventId        String         @db.Uuid
+  eventType      String
+  status         DeliveryStatus @default(PENDING)
+  attempts       Int            @default(0)
+  lastStatusCode Int?
+  lastError      String?
+  nextAttemptAt  DateTime?
+  deliveredAt    DateTime?
+  createdAt      DateTime       @default(now())
+
+  subscription WebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, eventId])
+  @@index([status, nextAttemptAt])
+}
+
+// ───────────────────────────── Platform (events, jobs, audit) ─────────────────────────────
 
 /// Events written in the same transaction as the change they describe.
 /// The relay process moves unpublished rows onto the job queues.

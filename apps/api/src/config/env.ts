@@ -16,6 +16,20 @@ const EnvSchema = z.object({
     .string()
     .default("http://localhost:5173")
     .transform((s) => s.split(",").map((o) => o.trim()).filter(Boolean)),
+  APP_SECRET: z
+    .string()
+    .min(32, "APP_SECRET must be at least 32 characters")
+    .refine((s) => !s.startsWith("change-me"), "APP_SECRET still has the example value; generate a random one"),
+  ACCESS_TOKEN_MINUTES: z.coerce.number().int().min(1).max(60).default(15),
+  REFRESH_TOKEN_DAYS: z.coerce.number().int().min(1).max(90).default(30),
+  COOKIE_SECURE: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
+  /** Where the web app runs; used to build links in emails (invites). */
+  WEB_APP_URL: z.string().url().default("http://localhost:5173"),
+  MAIL_MODE: z.enum(["console"]).default("console"),
+  MAIL_FROM: z.string().default("Cyrus <no-reply@cyrus.local>"),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

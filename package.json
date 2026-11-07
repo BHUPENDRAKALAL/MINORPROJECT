@@ -1,7 +1,7 @@
 {
-  "name": "placesync",
+  "name": "cyrus",
   "private": true,
-  "description": "PlaceSync: placement drive management and placement data platform (MBM University minor project)",
+  "description": "Cyrus: placement drive management and placement data platform (MBM University minor project)",
   "packageManager": "pnpm@10.34.9",
   "engines": {
     "node": ">=22"
@@ -9,13 +9,13 @@
   "scripts": {
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
-    "db:migrate": "pnpm --filter @placesync/api db:migrate",
-    "db:generate": "pnpm --filter @placesync/api db:generate",
-    "dev:api": "pnpm --filter @placesync/api dev:api",
-    "dev:realtime": "pnpm --filter @placesync/api dev:realtime",
-    "dev:worker": "pnpm --filter @placesync/api dev:worker",
-    "dev:relay": "pnpm --filter @placesync/api dev:relay",
-    "dev:web": "pnpm --filter @placesync/web dev",
+    "db:migrate": "pnpm --filter @cyrus/api db:migrate",
+    "db:generate": "pnpm --filter @cyrus/api db:generate",
+    "dev:api": "pnpm --filter @cyrus/api dev:api",
+    "dev:realtime": "pnpm --filter @cyrus/api dev:realtime",
+    "dev:worker": "pnpm --filter @cyrus/api dev:worker",
+    "dev:relay": "pnpm --filter @cyrus/api dev:relay",
+    "dev:web": "pnpm --filter @cyrus/web dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test"

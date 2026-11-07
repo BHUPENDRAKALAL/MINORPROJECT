@@ -1,4 +1,4 @@
-# PlaceSync — Final Project Plan
+# Cyrus (formerly PlaceSync) — Final Project Plan
 
 > **This file is the single source of truth for the project.**
 > If anything conflicts (the synopsis PDF, chats, code, or memory), **this file wins**.
@@ -6,7 +6,7 @@
 
 | | |
 |---|---|
-| Project | PlaceSync: A Placement Drive Management and Placement Data Platform |
+| Project | Cyrus: A Placement Drive Management and Placement Data Platform |
 | University | MBM University, 7th Semester Minor Project |
 | Students | Seya Mali (24UCSE4073), Bhupendra Kalal (24UCSE4008) |
 | Guide / Mentor | Dr. Abhishek Gaur / Dr. Simran Choudhary |
@@ -19,7 +19,7 @@
 
 Placement at MBM is run through WhatsApp groups, calls, spreadsheets and paper attendance. Shortlists and venue changes get lost, attendance is taken separately for every round, students can't see their interview-queue position, and past placement data (CTC, rounds, FAQs, stats) is scattered.
 
-PlaceSync centralises the **whole drive lifecycle** (company onboarding → drive → opt-in → rounds → attendance → results → interview queue → offer letters) and keeps **historical placement data** for future batches.
+Cyrus centralises the **whole drive lifecycle** (company onboarding → drive → opt-in → rounds → attendance → results → interview queue → offer letters) and keeps **historical placement data** for future batches.
 
 **What's new compared to the synopsis:** the company's HR is now a first-class user. After the TPO verifies the company, HR runs its own drive inside the app, under TPO rules and oversight.
 
@@ -47,7 +47,7 @@ PlaceSync centralises the **whole drive lifecycle** (company onboarding → driv
 ## 3. Core Flow: Company HR–Driven Drive
 
 ### 3.1 Company onboarding (via the Company Portal)
-There is a separate **Company Portal**: a public website where companies register. For simplicity it is built inside the same React web app as public pages (e.g. `/company/register`), and can later be moved to its own subdomain (e.g. `company.placesync…`).
+There is a separate **Company Portal**: a public website where companies register. For simplicity it is built inside the same React web app as public pages (e.g. `/company/register`), and can later be moved to its own subdomain (e.g. `company.cyrus…`).
 
 1. **Company registers** on the portal with:
    - company name, website, industry, address, about
@@ -149,7 +149,7 @@ For each round:
 | Layer | Tech | Use |
 |---|---|---|
 | Web app | **React + TypeScript (Vite)** | One codebase for every role. TPO, staff, volunteers, HR and interviewers use it as a website |
-| Student app | **Tauri v2** wrapping the same React app (Android; desktop build optional) | QR scan, location, push. **Week 1: 2-day test of QR + location + FCM push on Android.** If push fails → fallback decided then (PWA + email, or Expo) |
+| Student app | **Tauri v2** wrapping the same React app (Android; desktop build optional) | QR scan, location, push. **Week 1: test QR + location + FCM push on Android using a third-party push plugin.** Then build **our own push plugin** (`tauri-plugin-cyrus-push`, FCM-based) in Week 3. See BACKEND-DESIGN.md §5b |
 | Backend | **Node.js + Express + TypeScript** (REST, `/api/v1`; zod schemas validate requests and generate the OpenAPI docs) | All business logic, role + ownership checks |
 | Architecture | **Modular monolith, 3 process types:** `api`, `realtime`, `worker` (+ `relay`). Heavy work only in workers (`202 + jobId`) | Failure isolation and independent scaling without microservice overhead |
 | Events / jobs | **Outbox table + Redis queues (BullMQ)**, queues by priority: notify > webhooks > imports > documents/company-check > reports | No lost events; slow work never blocks drive day |
@@ -173,7 +173,7 @@ For each round:
 
 ## 6b. Reference Project: PlaceMint (ideas only, no code copied)
 
-Repo: https://github.com/23f3001304/PlaceMint-MAD-2-PPA-V2 (Flask + Vue + SQLite, no license).
+Repo: PlaceMint, a public placement-portal project on GitHub (Flask + Vue + SQLite, no license).
 **Rule:** we write all our code ourselves. We only take ideas from it, and credit it in the report as a reference.
 
 **Ideas we take:**
@@ -267,3 +267,6 @@ Repo: https://github.com/23f3001304/PlaceMint-MAD-2-PPA-V2 (Flask + Vue + SQLite
 | 2026-11-07 | Added section 6b: PlaceMint (Flask/Vue) used as an ideas-only reference. All code is written by us; the reference is credited in the report |
 | 2026-11-07 | **Approved:** BACKEND-DESIGN.md (REST, modular monolith with api/realtime/worker processes, outbox + BullMQ, compute separated from API, document matching, review team with work queue, company checks with crawler, webhooks, caching rules) and the four route weight classes. Stack changed: Tauri v2 (instead of Expo) + React/TS web, Node + TypeScript + Fastify (instead of Express). k8s moved to optional Week 6. Remaining open questions stay in BACKEND-DESIGN.md §12 |
 | 2026-11-07 | **Correction:** backend stays on **Node + Express** as originally decided (Fastify was only a suggestion and was approved by mistake). Express + TypeScript + zod (validation and OpenAPI docs) |
+| 2026-11-07 | Push notifications: Tauri only has local notifications, so we use a third-party FCM plugin for the Week 1 test and then build our own Tauri plugin on FCM (BACKEND-DESIGN.md §5b). Working rules: every commit credits Claude with a Co-Authored-By line, and git history is not rewritten unless it's truly needed |
+| 2026-11-07 | Assets: a friend (the asset contributor, Foundry) offered pixel assets and will also generate new ones with Vertex AI (ASSET-BRIEF.md). **The contributor is never named** in the app, README or report. We build our own Cyrus characters on his base instead of using his avatar or Foundry's mascot. New art is drawn as pixel-grid SVG in code, so the Gemini key is optional (DESIGN-DIRECTION.md) |
+| 2026-11-07 | **Renamed: the product is now called Cyrus** (was PlaceSync). All user-facing text, docs and emails use "Cyrus". Internal identifiers followed the same day: packages `@cyrus/*`, database/user `cyrus`, cookie `cy_refresh`, Tauri id `com.cyrus.app` |

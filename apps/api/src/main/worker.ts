@@ -1,5 +1,5 @@
 import { Worker } from "bullmq";
-import { QUEUES, type QueueKey } from "@placesync/shared";
+import { QUEUES, type QueueKey } from "@cyrus/shared";
 import { loadEnv } from "../config/env.ts";
 import { createDb } from "../lib/db.ts";
 import { createRedis } from "../lib/redis.ts";
@@ -30,7 +30,7 @@ const workers = keys.map((key) => {
       if (job.data.jobId) {
         await db.job.update({ where: { id: job.data.jobId }, data: { status: "RUNNING", startedAt: new Date() } });
       }
-      const result = await handler(job, { db });
+      const result = await handler(job, { db, env });
       if (job.data.jobId) {
         await db.job.update({
           where: { id: job.data.jobId },

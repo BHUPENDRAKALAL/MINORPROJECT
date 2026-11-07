@@ -30,3 +30,6 @@ Thumbs.db
 
 # generated code (Prisma client)
 apps/api/src/generated/
+
+# screenshots for design review (not committed)
+apps/web/.review/
