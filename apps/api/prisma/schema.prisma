@@ -1,0 +1,125 @@
+// PlaceSync database schema.
+// This first version holds only the platform tables every module relies on:
+// users + roles, the outbox (events), background jobs and the audit log.
+// Feature tables (companies, students, drives, rounds, ...) are added module by module.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  TPO
+  STAFF
+  VOLUNTEER
+  COORDINATOR
+  COMPANY_HR
+  INTERVIEWER
+  STUDENT
+  PLACED_SENIOR
+}
+
+enum AccountStatus {
+  ACTIVE
+  PAUSED
+  DEACTIVATED
+  BLOCKED
+}
+
+/// One login. A person can hold several roles (e.g. a volunteer is also a student).
+model User {
+  id            String        @id @default(uuid()) @db.Uuid
+  email         String        @unique
+  emailVerified Boolean       @default(false)
+  passwordHash  String?
+  status        AccountStatus @default(ACTIVE)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  roles     RoleGrant[]
+  jobs      Job[]
+  auditLogs AuditLog[]
+}
+
+/// A role given to a user, optionally with capabilities, a scope and an end date
+/// (used for staff and volunteers, BACKEND-DESIGN.md §4b).
+model RoleGrant {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @db.Uuid
+  role         Role
+  capabilities String[]
+  /// e.g. {"branches":["CSE"],"batches":[2026]} or {"companyId":"..."}
+  scope        Json?
+  expiresAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+}
+
+/// Events written in the same transaction as the change they describe.
+/// The relay process moves unpublished rows onto the job queues.
+model OutboxEvent {
+  id          String    @id @default(uuid()) @db.Uuid
+  type        String
+  version     Int       @default(1)
+  data        Json
+  createdAt   DateTime  @default(now())
+  publishedAt DateTime?
+  attempts    Int       @default(0)
+  lastError   String?
+
+  @@index([publishedAt, createdAt])
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+  CANCELLED
+}
+
+/// User-visible background work (GET /jobs/:id). Heavy routes return its id with 202.
+model Job {
+  id         String    @id @default(uuid()) @db.Uuid
+  queue      String
+  type       String
+  status     JobStatus @default(QUEUED)
+  progress   Int       @default(0)
+  input      Json?
+  result     Json?
+  error      String?
+  ownerId    String?   @db.Uuid
+  createdAt  DateTime  @default(now())
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  owner User? @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@index([ownerId, createdAt])
+  @@index([status])
+}
+
+/// Who did what, when. Written for every state change.
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @db.Uuid
+  action     String
+  entityType String
+  entityId   String
+  before     Json?
+  after      Json?
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+}

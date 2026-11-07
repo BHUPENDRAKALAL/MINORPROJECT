@@ -1,0 +1,32 @@
+# dependencies and builds
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Tauri / Rust
+apps/web/src-tauri/target/
+apps/web/src-tauri/gen/
+
+# secrets
+.env
+.env.*
+!.env.example
+
+# local data
+uploads/
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# generated code (Prisma client)
+apps/api/src/generated/

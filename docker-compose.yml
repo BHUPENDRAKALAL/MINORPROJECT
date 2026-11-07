@@ -1,0 +1,40 @@
+# Local development infrastructure: PostgreSQL + Redis.
+# Start with `pnpm infra:up`. Data is kept in named volumes (outside OneDrive).
+name: placesync
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: placesync
+      POSTGRES_PASSWORD: placesync_dev
+      POSTGRES_DB: placesync
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U placesync -d placesync"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Queues (BullMQ) need data kept on restart and no key eviction.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "6380:6379"   # host 6380: this laptop already runs an old Redis on 6379
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
+  redisdata:

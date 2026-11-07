@@ -1,0 +1,37 @@
+/* Base tokens. The full design system comes later (DESIGN-DIRECTION.md). */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --fg: #171b22;
+  --muted: #5d6676;
+  --line: #dfe3ea;
+  --accent: #2563c9;
+  --ok: #1f8a5b;
+  --bad: #c4401a;
+  --sans: system-ui, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12151b;
+    --surface: #1a1e26;
+    --fg: #e6eaf0;
+    --muted: #98a1b0;
+    --line: #2a313c;
+    --accent: #7ba7f0;
+    --ok: #5fcf9c;
+    --bad: #f08a63;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}

@@ -1,0 +1,418 @@
+<title>PlaceSync Project Plan</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: one readable column, a short contents strip, the drive flow as a numbered track */
+:root {
+  --bg: #f6f8f7;
+  --surface: #ffffff;
+  --ink: #17221f;
+  --muted: #55625e;
+  --line: #d9e1de;
+  --accent: #0f6b5c;
+  --accent-soft: #e2f0ec;
+  --warn: #8a5a00;
+  --warn-soft: #fbf0d9;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111816; --surface: #18221f; --ink: #e6eeeb; --muted: #9fb0aa; --line: #2b3935;
+    --accent: #5cc7ae; --accent-soft: #1d3530; --warn: #f0c46b; --warn-soft: #3a2f17;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111816; --surface: #18221f; --ink: #e6eeeb; --muted: #9fb0aa; --line: #2b3935;
+  --accent: #5cc7ae; --accent-soft: #1d3530; --warn: #f0c46b; --warn-soft: #3a2f17;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--body); font-size: 17px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 780px; margin: 0 auto; padding-block: 40px 72px; display: flex; flex-direction: column; gap: 48px; }
+h1, h2, h3 { font-family: var(--display); line-height: 1.2; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2rem, 6vw, 2.8rem); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 1.55rem; font-weight: 700; }
+h3 { font-size: 1.12rem; font-weight: 700; }
+p { margin: 0; }
+ul, ol { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 6px; }
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.eyebrow { font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.muted { color: var(--muted); }
+section { display: flex; flex-direction: column; gap: 16px; }
+section > p, section li { max-width: 68ch; }
+
+header { display: flex; flex-direction: column; gap: 14px; }
+.meta { display: grid; grid-template-columns: max-content 1fr; gap: 4px 18px; font-size: 0.95rem; padding-top: 6px; }
+.meta dt { color: var(--muted); }
+.meta dd { margin: 0; }
+.roll { font-family: var(--mono); font-size: 0.85em; color: var(--muted); }
+
+nav.toc { display: flex; flex-wrap: wrap; gap: 8px; }
+nav.toc a { text-decoration: none; font-size: 0.9rem; padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; color: var(--ink); background: var(--surface); }
+nav.toc a:hover { border-color: var(--accent); color: var(--accent); }
+
+.note { background: var(--accent-soft); border-radius: 10px; padding: 14px 18px; }
+.pending { background: var(--warn-soft); color: var(--ink); border-radius: 10px; padding: 14px 18px; }
+.pending strong { color: var(--warn); }
+
+.table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: 0; }
+th { font-family: var(--mono); font-weight: 500; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+td:first-child { font-weight: 600; white-space: nowrap; }
+
+/* Drive status strip */
+.stages { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 0.88rem; }
+.stages span { padding: 3px 10px; border-radius: 6px; background: var(--surface); border: 1px solid var(--line); }
+.stages i { font-style: normal; color: var(--muted); }
+
+/* Flow track */
+.flow { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0; counter-reset: step; }
+.flow > li { counter-increment: step; position: relative; padding: 0 0 28px 52px; max-width: none; }
+.flow > li::before {
+  content: counter(step); position: absolute; left: 0; top: 0;
+  width: 34px; height: 34px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-family: var(--mono); font-size: 0.9rem; color: var(--accent);
+  background: var(--accent-soft); border: 1px solid var(--accent);
+}
+.flow > li::after { content: ""; position: absolute; left: 17px; top: 38px; bottom: 4px; width: 1px; background: var(--line); }
+.flow > li:last-child::after { display: none; }
+.flow > li:last-child { padding-bottom: 0; }
+.flow h3 { padding-top: 4px; margin-bottom: 8px; }
+.flow ul { font-size: 0.97rem; }
+.who { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); margin-left: 6px; }
+
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+.box { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+
+.tier { display: flex; flex-direction: column; gap: 8px; }
+.tier + .tier { padding-top: 12px; border-top: 1px solid var(--line); }
+.tag { display: inline-block; font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); width: fit-content; }
+
+.decisions { list-style: none; padding: 0; gap: 10px; }
+.decisions li { display: flex; gap: 10px; align-items: baseline; }
+.chk { font-family: var(--mono); font-size: 0.8rem; flex: none; width: 4.6em; }
+.chk.done { color: var(--accent); }
+.chk.open { color: var(--warn); }
+
+footer { font-size: 0.9rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 18px; }
+
+@media (max-width: 480px) {
+  body { font-size: 16px; }
+  .flow > li { padding-left: 46px; }
+  td:first-child { white-space: normal; }
+}
+</style>
+
+<div class="wrap">
+
+<header>
+  <span class="eyebrow">MBM University · 7th Semester Minor Project</span>
+  <h1>PlaceSync Project Plan</h1>
+  <p class="muted">An app for the placement cell, companies and students to run campus placement drives in one place, and to keep placement records for future batches.</p>
+  <dl class="meta">
+    <dt>Students</dt><dd>Seya Mali <span class="roll">24UCSE4073</span> · Bhupendra Kalal <span class="roll">24UCSE4008</span></dd>
+    <dt>Guide</dt><dd>Dr. Abhishek Gaur</dd>
+    <dt>Mentor</dt><dd>Dr. Simran Choudhary</dd>
+    <dt>Updated</dt><dd>7 November 2026</dd>
+  </dl>
+  <p class="note">This is the final plan we are building from. If the synopsis or anything else disagrees with this plan, this plan is followed. Any change gets written here first.</p>
+</header>
+
+<nav class="toc" aria-label="Sections">
+  <a href="#problem">Problem</a>
+  <a href="#users">Who uses it</a>
+  <a href="#signup">Joining</a>
+  <a href="#drive">Drive flow</a>
+  <a href="#other">Other features</a>
+  <a href="#tools">Tools</a>
+  <a href="#priority">Priority</a>
+  <a href="#team">Who does what</a>
+  <a href="#weeks">Six weeks</a>
+  <a href="#open">Still to decide</a>
+</nav>
+
+<section id="problem">
+  <h2>The problem</h2>
+  <p>Right now placements at MBM run on WhatsApp groups, phone calls, spreadsheets and paper attendance sheets. Shortlists and venue changes get lost in chats. Attendance is taken again for every round. Students can't tell when their interview turn will come. Old placement information like CTC, rounds and common questions is spread across many files.</p>
+  <p>PlaceSync puts the whole drive in one app, from the company's first request to the offer letter, and saves each drive's data for future students.</p>
+  <p><strong>What changed from the synopsis:</strong> the company's HR now uses the app directly. Once the TPO approves the company, HR runs their own drive in the app, following the college's rules, while the TPO can see and control everything.</p>
+</section>
+
+<section id="users">
+  <h2>Who uses it</h2>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Role</th><th>What they can do</th></tr></thead>
+    <tbody>
+      <tr><td>TPO</td><td>Approves companies and drives, sets the college's placement rules, verifies students, checks remarks before students see them, sees all offer letters, closes drives, and can do anything HR can do if a company doesn't use the app.</td></tr>
+      <tr><td>Coordinator</td><td>Helps the TPO on drive day: attendance, venue updates, announcements, managing the interview line. Only for the drives they are given.</td></tr>
+      <tr><td>Company HR</td><td>Creates drives for their own company, adds rounds, picks eligible students, posts results, runs interviews, uploads offer letters, adds interviewers.</td></tr>
+      <tr><td>Interviewer</td><td>Added by HR. Calls the next student, starts and ends interviews, writes notes, suggests select or reject. Only for their own panel.</td></tr>
+      <tr><td>Student</td><td>Fills their profile, joins or skips drives, sees rounds and updates, marks attendance, sees their own results and queue turn, accepts or declines their offer.</td></tr>
+      <tr><td>Placed senior</td><td>Shares their profile and answers common questions. Contact details are shown only if they agree.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h3>Rules that always apply</h3>
+  <ul>
+    <li>HR and interviewers see only their own company's drives.</li>
+    <li>When a drive is closed, HR can only view it, not change it. Their access ends after a period the TPO sets.</li>
+    <li>Every action by HR, interviewers and the TPO is recorded, so we can always check who did what.</li>
+  </ul>
+</section>
+
+<section id="signup">
+  <h2>How people join</h2>
+  <div class="grid2">
+    <div class="box">
+      <h3>Companies</h3>
+      <ol>
+        <li>The company fills a registration form on the company website: company details, HR details, official email, and the job they want to hire for.</li>
+        <li>HR confirms the email with a one-time code (OTP). Gmail or Yahoo addresses are marked so the TPO checks them more carefully.</li>
+        <li>The request reaches the TPO, who approves it, rejects it with a reason, or asks for more details.</li>
+        <li>After approval, HR gets an email link and sets their own password. We never send a password by email.</li>
+        <li>A company that already has an account just logs in for its next drive.</li>
+        <li>If a company only sends the job details by email, the TPO can enter everything for them.</li>
+      </ol>
+      <p class="muted">The company website starts as a few public pages in our admin website, so we don't build a second site.</p>
+    </div>
+    <div class="box">
+      <h3>Students</h3>
+      <ol>
+        <li>The student signs up with their roll number and personal email, and confirms the email with an OTP. MBM has no college email.</li>
+        <li>One roll number and one email can have only one account. If someone has already used a roll number, the TPO sorts it out.</li>
+        <li>The student fills in branch, batch, CGPA, backlogs, 10th and 12th marks, skills and resume, and uploads marksheets as proof.</li>
+        <li>The TPO or a coordinator checks the details. Only verified students can be picked for drives.</li>
+        <li>After verification, CGPA and backlogs are locked. To change them, the student sends a request that is checked again.</li>
+        <li>If the university gives us a sheet of student marks, the app compares it with student profiles, so the TPO only checks the ones that don't match.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section id="drive">
+  <h2>How a drive runs</h2>
+  <div class="stages" aria-label="Drive stages">
+    <span>Draft</span><i>→</i><span>Waiting for TPO</span><i>→</i><span>Published</span><i>→</i><span>Ongoing</span><i>→</i><span>Results out</span><i>→</i><span>Closed</span>
+  </div>
+  <ol class="flow">
+    <li>
+      <h3>HR creates the drive <span class="who">HR · TPO</span></h3>
+      <ul>
+        <li>Role, CTC or stipend, location, job description, bond and dates.</li>
+        <li>Each round with its type (pre-placement talk, online test, group discussion, technical interview, HR interview), date, time and venue or link.</li>
+        <li>Students can't see the drive until the TPO approves it.</li>
+      </ul>
+    </li>
+    <li>
+      <h3>HR picks eligible students <span class="who">HR</span></h3>
+      <ul>
+        <li>The TPO sets college-wide rules first, for example whether a student who already has an offer can apply again.</li>
+        <li>HR filters within those rules by branch, CGPA, backlogs, 10th and 12th marks and batch.</li>
+        <li>At this stage HR sees only name, roll number, branch, CGPA and backlogs. No phone number, email or resume.</li>
+        <li>Picked students get a phone notification.</li>
+      </ul>
+    </li>
+    <li>
+      <h3>Students join or skip <span class="who">Student</span></h3>
+      <ul>
+        <li>Every drive has a last date to respond. No response means the student skipped it.</li>
+        <li>Joining means the student agrees to share their resume and contact details with the company.</li>
+        <li>If a student joins and then misses a round without a good reason, the TPO's rules decide what happens, from a warning to being blocked from later drives.</li>
+      </ul>
+    </li>
+    <li>
+      <h3>Each round <span class="who">Student · Coordinator · HR</span></h3>
+      <ul>
+        <li>Students get notified of the time, venue, instructions and any change.</li>
+        <li>Attendance: the student scans a QR code shown at the venue. The code keeps changing and works only at the venue, so it can't be shared from outside.</li>
+        <li>If scanning fails, a coordinator marks attendance by hand and writes the reason.</li>
+        <li>HR enters each student's result as selected, rejected or on hold, or uploads a results sheet when the test was on another website such as HackerRank.</li>
+        <li>Only selected students go to the next round. Each student sees their own result. The TPO decides whether the list of selected roll numbers is shown to everyone.</li>
+      </ul>
+    </li>
+    <li>
+      <h3>Interview round and the waiting line <span class="who">Interviewer · Student</span></h3>
+      <ul>
+        <li>The order of the shortlist is the order of the line.</li>
+        <li>If several panels interview at the same time, each panel has its own line.</li>
+        <li>The interviewer presses Call next, then Start interview, writes notes, then End interview.</li>
+        <li>A student who is absent or late is moved to the end of the line and told about it.</li>
+        <li>Students see their place in line and roughly how long they'll wait, based on how long the interviews so far have taken. It updates without refreshing.</li>
+      </ul>
+    </li>
+    <li>
+      <h3>Notes and remarks <span class="who">Interviewer · TPO</span></h3>
+      <ul>
+        <li>Private notes are for the company and the TPO only.</li>
+        <li>A remark for the student is optional. The TPO reads it first and then releases it to the student.</li>
+        <li>After all interviews, HR goes through the notes and makes the final select or reject decision.</li>
+      </ul>
+    </li>
+    <li>
+      <h3>Final results and offer letters <span class="who">HR · Student · TPO</span></h3>
+      <ul>
+        <li>HR announces final results, and students are notified.</li>
+        <li>HR uploads one offer letter for each selected student. Only that student, the TPO and that company's HR can open it. Download links stop working after a short time.</li>
+        <li>The student accepts or declines the offer before a last date.</li>
+        <li>When a student accepts, they are marked as placed, which updates placement numbers and the TPO's rules.</li>
+      </ul>
+    </li>
+    <li>
+      <h3>TPO closes the drive <span class="who">TPO</span></h3>
+      <ul>
+        <li>HR can now only view the drive.</li>
+        <li>The drive's rounds, number of students in each round, selections and CTC are saved for future batches to see.</li>
+      </ul>
+    </li>
+  </ol>
+</section>
+
+<section id="other">
+  <h2>Other features (same as the synopsis)</h2>
+  <div class="grid2">
+    <div class="box">
+      <h3>Drive extras</h3>
+      <ul>
+        <li>Calendar and reminders</li>
+        <li>Announcements</li>
+        <li>Download attendance and result reports</li>
+      </ul>
+    </div>
+    <div class="box">
+      <h3>Placement records</h3>
+      <ul>
+        <li>Company pages: roles, eligibility, CTC, links</li>
+        <li>Past years' round-by-round data, filled from closed drives or added from old sheets</li>
+        <li>Common questions for each company</li>
+        <li>Placed seniors' profiles, with contact only if they agree</li>
+        <li>Placement numbers for each department</li>
+      </ul>
+    </div>
+    <div class="box">
+      <h3>Community and help <span class="tag">if time permits</span></h3>
+      <ul>
+        <li>Reviews after a drive, checked before posting</li>
+        <li>Help requests</li>
+        <li>Interview experience discussions, managed by the TPO</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="tools">
+  <h2>Tools we will use</h2>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Part</th><th>Tool</th><th>Used for</th></tr></thead>
+    <tbody>
+      <tr><td>Student app</td><td>React Native with Expo</td><td>Android and iPhone app from one codebase: QR scanning, notifications, waiting line, offers</td></tr>
+      <tr><td>Admin website</td><td>React</td><td>Screens for the TPO, coordinators, HR and interviewers, plus the company registration pages</td></tr>
+      <tr><td>Server</td><td>Node.js with Express</td><td>All the app's logic and checking who is allowed to do what</td></tr>
+      <tr><td>Live updates</td><td>Socket.io</td><td>Updating the interview line on screen without refreshing</td></tr>
+      <tr><td>Database</td><td>PostgreSQL with Prisma</td><td>Storing students, companies, drives, rounds, attendance and results</td></tr>
+      <tr><td>Login</td><td>JWT tokens</td><td>Keeping users logged in and checking their role</td></tr>
+      <tr><td>Notifications</td><td>Firebase Cloud Messaging</td><td>Phone notifications for shortlists, rounds and results</td></tr>
+      <tr><td>File storage</td><td>To be decided</td><td>Resumes, marksheets, job descriptions, offer letters</td></tr>
+      <tr><td>Email</td><td>Nodemailer</td><td>OTP codes, HR invite links, important alerts</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="muted">Passwords are stored in scrambled form, repeated wrong logins are slowed down, and every form input is checked on the server.</p>
+</section>
+
+<section id="priority">
+  <h2>What we build first</h2>
+  <div class="box">
+    <div class="tier">
+      <span class="tag">Must have</span>
+      <p>Everything needed to show one full drive in the demo.</p>
+      <ul>
+        <li>Login and roles</li>
+        <li>Company registration and approval; student signup and verification</li>
+        <li>Drive creation with rounds and TPO approval</li>
+        <li>Picking eligible students and notifying them</li>
+        <li>Join or skip with a last date</li>
+        <li>QR attendance with manual backup</li>
+        <li>Round results, in the app or from a sheet</li>
+        <li>Interview line with panels, start/end and notes</li>
+        <li>Final results, offer letters, accept or decline</li>
+        <li>Closing the drive and updating placement numbers</li>
+        <li>TPO doing HR's work when a company doesn't use the app</li>
+      </ul>
+    </div>
+    <div class="tier">
+      <span class="tag">Should have</span>
+      <p>TPO checking remarks, rules for students who skip rounds, calendar and reminders, announcements, report downloads, company pages, past-year data, common questions, placement numbers, adding old records from sheets.</p>
+    </div>
+    <div class="tier">
+      <span class="tag">If time permits</span>
+      <p>Placed seniors' profiles, reviews, help requests, discussion area, interviewer screens in the phone app.</p>
+    </div>
+  </div>
+</section>
+
+<section id="team">
+  <h2>Who does what</h2>
+  <div class="grid2">
+    <div class="box">
+      <h3>Seya Mali</h3>
+      <p>Student phone app: login screens, joining drives, round details, QR scanning, interview line screen, results and offer screens, connecting the app to the server, testing.</p>
+    </div>
+    <div class="box">
+      <h3>Bhupendra Kalal</h3>
+      <p>Server and database, admin website for the TPO, HR and interviewers, eligibility rules, company and student approval, attendance and results, interview line logic, offer letter storage, placement records, putting the app online, testing.</p>
+    </div>
+  </div>
+  <p><strong>Both:</strong> planning, database review, joining the parts together, documentation, testing, fixing bugs and the final demo.</p>
+</section>
+
+<section id="weeks">
+  <h2>Six-week plan</h2>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Week</th><th>Work</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Finish this plan, design the database, sketch the screens, list the server functions, set up the project.</td></tr>
+      <tr><td>2</td><td>Login and roles, student signup and verification, TPO screens, company registration and approval, HR invite email, TPO rules.</td></tr>
+      <tr><td>3</td><td>Drive and round creation, TPO approval, picking eligible students, notifications, join or skip, QR attendance and manual backup.</td></tr>
+      <tr><td>4</td><td>Round results, interview line with panels, start and end interview, notes and TPO-checked remarks.</td></tr>
+      <tr><td>5</td><td>Final results, offer letters, accept or decline, closing drives, placement numbers, company pages, past data, common questions. Extra features if time permits.</td></tr>
+      <tr><td>6</td><td>Join all the parts, security checks, a full practice drive (TPO, HR and students), bug fixes, report downloads, update the synopsis, final demo.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="open">
+  <h2>Still to decide</h2>
+  <ul class="decisions">
+    <li><span class="chk done">Done</span><span>Companies apply through a registration form on the company website.</span></li>
+    <li><span class="chk done">Done</span><span>MBM has no college email, so students sign up with a personal email, OTP and roll number. TPO verification confirms they are real students.</span></li>
+    <li><span class="chk open">Open</span><span>Will the university give us a sheet of student CGPA and backlogs? Probably yes. Until then we use a sample sheet, and manual checking works without it.</span></li>
+    <li><span class="chk open">Open</span><span>Where to store files (resumes, offer letters).</span></li>
+    <li><span class="chk open">Open</span><span>Where to host the server and database.</span></li>
+    <li><span class="chk open">Open</span><span>MBM's exact placement rules, for example one offer per student, or a CTC limit above which a placed student can still apply.</span></li>
+    <li><span class="chk open">Open</span><span>What happens to students who join a drive and then miss a round.</span></li>
+    <li><span class="chk open">Open</span><span>Whether the list of selected students is shown to everyone by default.</span></li>
+    <li><span class="chk open">Open</span><span>Whether interviewer and coordinator screens go in the phone app or only on the website.</span></li>
+  </ul>
+</section>
+
+<footer>The detailed working copy of this plan is the PLAN.md file in the project folder. This page is the easy-to-read version.</footer>
+
+</div>
