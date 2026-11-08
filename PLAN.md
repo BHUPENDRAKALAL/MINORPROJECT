@@ -72,9 +72,13 @@ There is a separate **Company Portal**: a public website where companies registe
 
 ### 3.2 Drive creation
 1. HR creates a drive: role(s), CTC/stipend, location, JD, bond, timeline, **rounds** (type, date, time, venue/online link, mode).
-   - Round types: `PPT`, `OA`, `GD`, `TECHNICAL_INTERVIEW`, `HR_INTERVIEW`, `OTHER`.
+   - Round kinds: `PPT`, `OA`, `GD`, `TECHNICAL`, `INTERVIEW`, `HR`, `OTHER`. A kind can **repeat** in one drive (Technical round 1, 2, 3…; Interview round 1, 2, 3…): the shown name is the round's title, numbered automatically and renumbered when rounds move. A round's date can stay "to be announced".
+   - The round builder has one-click templates (e.g. OA → Technical 1 → Technical 2 → HR). After approval, rounds can still change; students in the drive are told.
+   - Builder steps: 1. Job details · 2. Who can apply (live count of matching students) · 3. Rounds · 4. Check and send.
 2. Drive status: `DRAFT → PENDING_APPROVAL → PUBLISHED → ONGOING → RESULTS_DECLARED → CLOSED`.
-3. **TPO approves** the drive before any student can see it.
+3. **TPO approves** the drive before any student can see it. The TPO can send it back with a note, or cancel it later (students and HR are told). A drive the TPO creates for a company without HR is published directly.
+4. **Visibility to students:** every student can see that an approved drive exists (company, role, type, status), marked "Invite only". Details, pay and rounds are visible **only to students invited** to that drive. Online test links only after the student joins.
+5. After approval, HR can change only the description, location and deadline; pay, role and eligibility are locked (the TPO can still change them).
 
 ### 3.3 Eligibility & shortlisting
 1. **The TPO sets the base policy** (applies to every drive):
@@ -90,38 +94,44 @@ There is a separate **Company Portal**: a public website where companies registe
 4. **No-show rule:** if a student opts in and then misses a round without a valid reason, the TPO policy decides the penalty (warning → block from future drives). The TPO can override it.
 
 ### 3.5 Rounds
-For each round:
-1. Opted-in (and still active) students see the round details and get **notifications** (time, venue, instructions, changes).
-2. **Attendance:**
-   - **QR + location check**: the QR is generated on the HR/Coordinator device, rotates every few seconds, and works only within the venue radius.
-   - **Manual fallback** by a Coordinator/TPO, always recorded in the audit log with a reason.
-3. **Results:**
-   - HR marks each student `SELECTED / REJECTED / ON_HOLD` in the app, **or uploads a CSV** (for OAs run on external platforms like HackerRank).
-   - Only `SELECTED` students move to the next round. Everyone gets notified.
-   - **Result visibility:** each student sees **their own** result. The TPO decides per drive whether a public list of selected roll numbers is also shown.
+Built 2026-11-08 (Phase B1/B2). Each round has its own page for HR and the TPO.
+1. **Order:** rounds run one after another. A round can start only after the results of every earlier round are published. **Starting the first round closes joining**: unanswered invites expire and the drive becomes "Rounds in progress".
+2. Who is in a round: every student who joined and hasn't been knocked out in an earlier round. Starting a round tells them (in-app + email).
+3. **Attendance (on-campus rounds):**
+   - HR (or the TPO, or staff/volunteers with the drive-day attendance permission) opens check-in and puts the page on a screen at the venue ("Full screen" mode for a projector).
+   - The QR code **changes every 15 seconds**; the current and the previous code work, so a photo shared on a group stops working within ~30 s.
+   - The QR is a link: students scan it with the normal phone camera, it opens Cyrus and checks them in. No app or scanner needed.
+   - **Location check (optional):** when opening check-in, the opener can lock it to their current location and a radius (default 150 m). Students then have to share their location and be inside the radius.
+   - **Manual fallback:** only the TPO (or attendance helpers) can mark a student present or absent by hand, always with a reason, kept in the audit log. HR can't.
+   - Results can be published only after check-in is closed. Students not checked in at that point count as **absent**.
+   - Online rounds have no QR check-in; the test platform's results decide.
+4. **Results:**
+   - HR picks a result per student (Selected / Not selected / On hold), saves (students see nothing yet), or **uploads a CSV** from the test platform: any file whose first row has a roll-number column and a result column (Selected/Rejected, Pass/Fail, Qualified/Not qualified…). Rows that don't match a student in the round are listed back.
+   - **Publish** (can't be undone; needs every present student decided and nobody on hold): not selected → out of the drive; absent → out + no-show counted on the student (policy warning); selected → next round. After the **last round**, selected students are **selected for the job** and the drive becomes "Results out".
+   - A pre-placement talk has no results: "Finish the talk" only records who came.
+   - **Result visibility:** each student sees only their own result per round on the drive page ("You cleared this round", "Not selected", "You were absent", "Checked in"). The public selected list stays a later option.
 
 ### 3.6 Interview round & live queue
-1. The order of the shortlist list = the **queue order**.
-2. Several **panels** can run in parallel → each panel has **its own queue** (HR splits the shortlist across panels, or the system auto-splits it).
-3. Interviewer actions: **Call next → Start Interview → (write notes) → End Interview**.
-4. Queue handling:
-   - Absent/late student → **Skip** → moved to the end of the queue (notified).
-   - Students see a **live position** and an **estimated wait time** (based on average start→end duration). Live updates via Socket.io.
-5. **Notes vs feedback (two separate fields):**
-   - **Private notes**: visible to the company + TPO only.
-   - **Student-facing feedback/remark**: optional. **The TPO reviews it first** and only then is it released to the student.
-6. After all interviews, HR looks at all the notes and gives the final select/reject.
+Built 2026-11-08 (Phase B3). Works for Technical, Interview and HR rounds.
+1. **Panels:** on the round page HR (or the TPO) adds panels: a name, a room and the people on it (the company's HR and interviewers). HR invites interviewers by email from the company **Team** page; an interviewer can only open panels they sit on.
+2. **Lines:** "Make the interview lines" splits the round's students evenly across the panels, in roll-number order (if check-in was used, only students who checked in). Running it again adds late arrivals to the shortest line. HR can move a waiting student to another panel.
+3. **Interviewer screen** ("My panels" → a panel): **Call next** (the student is told at once: "Your turn: go to Room 204") → **They're here: start** (timer runs) → private notes + recommendation (Select / Hold / Reject) + an optional remark for the student → **End interview**. Two clicks can't call two students at once (the panel's line is locked while calling).
+4. **Skip:** a called student who isn't there goes to the end of the line and is told. The second skip marks them absent from the line; "Back in line" undoes it if they turn up.
+5. **Students** see their place on the drive page, refreshed every 10 seconds: "You're number 3 in line for Panel A (Room 204), about 30 min". The wait is (people ahead + the one in the room) × the panel's average interview length (15 min until two interviews are done). Live push with Socket.io comes later; polling is enough for one campus.
+6. **Notes vs remarks:** private notes and recommendations are seen only by the company and the TPO. A remark for the student goes to the TPO first (drive page → "Feedback to check"); the TPO sends it as is, rewords it, or doesn't send it. Only then does the student see it under the round.
+7. **Final decision:** the round's results table shows each student's panel recommendation and notes; "Use panel recommendations" fills the results, HR can change any, then publishes as in 3.5. Publishing waits until no interview is still running.
 
 ### 3.7 Final results, offers & closing
-1. HR declares the final results → students notified → drive status `RESULTS_DECLARED`.
-2. HR uploads an **offer letter per selected student** (PDF).
-   - **Who can see it:** that student, the TPO, and that company's HR. Nobody else.
-   - Stored in private storage, served only through **short-lived signed URLs**.
-3. Student **accepts / declines** the offer (with a deadline).
-4. On acceptance → student placement status updates automatically → feeds the **Placement Statistics** and the TPO policy (e.g., the one-offer rule).
-5. The TPO **closes the drive** → status `CLOSED` → HR becomes read-only → the drive data becomes part of the **historical placement data** (rounds, participation, selections, CTC).
-
----
+Built 2026-11-08 (Phase B4).
+1. Publishing the **last round** declares the final results: selected students are told, the drive becomes "Results out".
+2. **Offer letters:** on the drive's **Offers** tab HR uploads one PDF per selected student (optional joining date). The CTC defaults to the drive's CTC.
+   - **Who can open it:** that student, the TPO and that company's HR. Nobody else (not interviewers, not other students).
+   - Stored in private storage and opened only through a **2-minute signed link**. A student can't open a letter still being virus-checked.
+   - HR can **replace** the letter (the student is told) or **withdraw** an unanswered offer with a reason the student sees.
+3. **Student answers** on the drive page: read the letter, **Accept** or **Decline** before the deadline (TPO policy: 7 days by default). An unanswered offer past its deadline counts as expired.
+4. **Accepting** marks the student **Placed**, records the placement (company, role, CTC, branch, batch: feeds the statistics and the history), and tells HR. **One-offer rule:** an already-placed student can't accept another offer unless it is a "dream" offer (CTC at or above the TPO's dream threshold).
+5. The **TPO closes the drive** once results are out: HR can no longer send or change offers; the drive stays as history. Students with an unanswered offer can still answer until its deadline.
+6. Also built with this step: company HR and interviewers can open the **resume** of a student who joined (gave consent to) one of their company's drives; the panel screen has an "Open resume" button.
 
 ## 4. Rest of the Scope (same as the synopsis)
 
@@ -271,3 +281,7 @@ Repo: PlaceMint, a public placement-portal project on GitHub (Flask + Vue + SQLi
 | 2026-11-07 | Assets: a friend (the asset contributor, Foundry) offered pixel assets and will also generate new ones with Vertex AI (ASSET-BRIEF.md). **The contributor is never named** in the app, README or report. We build our own Cyrus characters on his base instead of using his avatar or Foundry's mascot. New art is drawn as pixel-grid SVG in code, so the Gemini key is optional (DESIGN-DIRECTION.md) |
 | 2026-11-07 | **Renamed: the product is now called Cyrus** (was PlaceSync). All user-facing text, docs and emails use "Cyrus". Internal identifiers followed the same day: packages `@cyrus/*`, database/user `cyrus`, cookie `cy_refresh`, Tauri id `com.cyrus.app` |
 | 2026-11-08 | Storage: SeaweedFS (S3-compatible, free) instead of MinIO, whose community edition is no longer published or maintained. Email: Mailpit in development, Brevo free plan (300/day) for real sending, via SMTP. Built student profile + document upload + submit/withdraw, the review queue (get next, 15-min lock, verify/reject, second checks, escalation to TPO) and TPO team invites |
+| 2026-11-08 | Drives Phase A built: HR creates a drive in 4 steps, flexible round builder (repeatable kinds, auto-numbered names, templates), TPO approve / send back / cancel, eligibility preview with placement policy, invite all or picked students, student join (with consent) or skip until the deadline, schedule-change and cancel notifications. Students see other drives by name only ("Invite only"). Round kinds changed to PPT/OA/GD/TECHNICAL/INTERVIEW/HR/OTHER; round date may be empty. Demo data: hr@cyrus.test with Northwind Systems drives. Phase B next: attendance (QR), results, interview queue, offers |
+| 2026-11-08 | Drives Phase B1/B2 built: round lifecycle (start in order; first round closes joining), QR check-in (rotating every 15 s, scanned with the phone camera, optional location radius, manual marking by the TPO only with a reason), results by hand or CSV from a test platform, publish (out / absent + no-show count / through / selected after the last round), students see their own result per round. Access rule added: a route can allow a role OR a permission (drive-day helpers). Next: B3 interview queue with panels, B4 offers |
+| 2026-11-08 | Drives Phase B3 built: interview panels (HR, interviewers), HR invites interviewers from the company Team page, lines split evenly (only checked-in students if check-in was used), interviewer screen with call next / start / end / skip (absent after two skips, can be put back), students see their place and a wait estimate, private notes vs student remarks (TPO checks remarks before release), panel recommendations shown next to results. Demo: interviewer@cyrus.test and the Support Engineer drive for interview day. Next: B4 offers |
+| 2026-11-08 | Drives Phase B4 built: offer letters (PDF per selected student, visible only to the student, TPO and company HR via 2-minute links; replace or withdraw), student accept/decline with a deadline (expired after it), accepting places the student and writes the placement record, one-offer rule with the dream-offer exception, TPO closes the drive. Company HR and interviewers can open the resume of students who joined their drives. Demo: Billing Analyst drive with final results out. Phase B of drives is complete |

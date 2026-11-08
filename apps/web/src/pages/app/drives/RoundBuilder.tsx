@@ -1,0 +1,147 @@
+import { useId } from "react";
+import { MAX_ROUNDS, nextRoundTitle, ROUND_KINDS, ROUND_TEMPLATES, ROUND_TYPES, type RoundType } from "@cyrus/shared";
+import { Field, SelectField } from "../../../components/form";
+import type { Round } from "../../../lib/api";
+import { fromLocalInput, renumber, toLocalInput } from "./format";
+
+const blank = (type: RoundType, existing: Round[]): Round => ({
+  type,
+  title: nextRoundTitle(type, existing),
+  mode: type === "OA" ? "ONLINE" : "OFFLINE",
+  startsAt: null,
+  venue: null,
+  onlineLink: null,
+  instructions: null,
+});
+
+export function RoundBuilder({ rounds, onChange, errors = {} }: { rounds: Round[]; onChange: (r: Round[]) => void; errors?: Record<string, string> }) {
+  const full = rounds.length >= MAX_ROUNDS;
+  const set = (i: number, patch: Partial<Round>) => onChange(rounds.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const move = (i: number, by: -1 | 1) => {
+    const next = [...rounds];
+    [next[i], next[i + by]] = [next[i + by]!, next[i]!];
+    onChange(renumber(next));
+  };
+
+  return (
+    <div className="cy-builder">
+      <div className="chips" role="group" aria-label="Add a round">
+        <span className="chips-label">Add a round:</span>
+        {ROUND_TYPES.map((t) => (
+          <button key={t} type="button" className="chip-link" disabled={full} title={ROUND_KINDS[t].hint} onClick={() => onChange([...rounds, blank(t, rounds)])}>
+            + {ROUND_KINDS[t].label}
+          </button>
+        ))}
+      </div>
+      {full && <p className="field-hint">A drive can have at most {MAX_ROUNDS} rounds.</p>}
+
+      {!rounds.length && (
+        <div className="panel cy-templates">
+          <p className="cy-h3">No rounds yet. Add them one by one with the buttons above, or start from a common pattern:</p>
+          <div className="buttons">
+            {ROUND_TEMPLATES.map((t) => (
+              <button
+                key={t.name}
+                type="button"
+                className="quiet"
+                onClick={() => onChange(t.types.reduce<Round[]>((acc, type) => [...acc, blank(type, acc)], []))}
+              >
+                {t.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <ol className="cy-round-cards">
+        {rounds.map((r, i) => (
+          <RoundCard
+            key={r.id ?? `new-${i}-${r.type}`}
+            r={r}
+            i={i}
+            last={i === rounds.length - 1}
+            errors={errors}
+            onSet={(p) => set(i, p)}
+            onMove={(by) => move(i, by)}
+            onRemove={() => onChange(renumber(rounds.filter((_, j) => j !== i)))}
+          />
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function RoundCard({
+  r,
+  i,
+  last,
+  errors,
+  onSet,
+  onMove,
+  onRemove,
+}: {
+  r: Round;
+  i: number;
+  last: boolean;
+  errors: Record<string, string>;
+  onSet: (p: Partial<Round>) => void;
+  onMove: (by: -1 | 1) => void;
+  onRemove: () => void;
+}) {
+  const started = r.status != null && r.status !== "SCHEDULED";
+  const notesId = useId();
+  const err = (f: string) => errors[`rounds.${i}.${f}`];
+  return (
+    <li className="panel cy-round-card" aria-label={`Round ${i + 1}: ${r.title || ROUND_KINDS[r.type].label}`}>
+      <div className="cy-round-card-head">
+        <span className="cy-round-no" aria-hidden="true">
+          {i + 1}
+        </span>
+        <span className="pill">{ROUND_KINDS[r.type].label}</span>
+        {started && <span className="stage working fam-azure">Started</span>}
+        <div className="cy-round-tools">
+          <button type="button" className="quiet" disabled={i === 0} onClick={() => onMove(-1)} aria-label={`Move ${r.title} up`}>
+            ↑
+          </button>
+          <button type="button" className="quiet" disabled={last} onClick={() => onMove(1)} aria-label={`Move ${r.title} down`}>
+            ↓
+          </button>
+          <button type="button" className="quiet" disabled={started} onClick={onRemove} aria-label={`Remove ${r.title}`}>
+            Remove
+          </button>
+        </div>
+      </div>
+      <div className="cy-grid">
+        <Field label="Round name" value={r.title} maxLength={80} onChange={(e) => onSet({ title: e.target.value })} error={err("title")} placeholder={ROUND_KINDS[r.type].label} />
+        <SelectField label="Where" value={r.mode} onChange={(e) => onSet({ mode: e.target.value as Round["mode"] })}>
+          <option value="OFFLINE">On campus</option>
+          <option value="ONLINE">Online</option>
+        </SelectField>
+        <Field
+          label="Starts"
+          type="datetime-local"
+          value={toLocalInput(r.startsAt)}
+          onChange={(e) => onSet({ startsAt: fromLocalInput(e.target.value) })}
+          error={err("startsAt")}
+          hint="Leave empty if not fixed yet."
+        />
+        {r.mode === "OFFLINE" ? (
+          <Field label="Venue" value={r.venue ?? ""} maxLength={200} onChange={(e) => onSet({ venue: e.target.value || null })} error={err("venue")} placeholder="e.g. CSE block, Lab 2" />
+        ) : (
+          <Field
+            label="Test or meeting link"
+            type="url"
+            value={r.onlineLink ?? ""}
+            onChange={(e) => onSet({ onlineLink: e.target.value || null })}
+            error={err("onlineLink")}
+            hint="Only students who joined see it."
+          />
+        )}
+      </div>
+      <div className="field">
+        <label htmlFor={notesId}>Instructions for students (optional)</label>
+        <textarea id={notesId} rows={2} maxLength={2000} value={r.instructions ?? ""} onChange={(e) => onSet({ instructions: e.target.value || null })} />
+      </div>
+    </li>
+  );
+}

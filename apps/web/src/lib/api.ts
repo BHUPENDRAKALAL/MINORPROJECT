@@ -1,4 +1,4 @@
-import type { Role } from "@cyrus/shared";
+import type { DriveStatus, Eligibility, JobType, ParticipationStatus, ResultValue, Role, RoundType } from "@cyrus/shared";
 import { APP_NAME } from "./brand";
 
 /** Base URL of the API. Empty in the browser dev server (Vite forwards /api); set VITE_API_URL for Tauri builds. */
@@ -288,7 +288,7 @@ export const meApi = {
 // Files, student profile, review queue, team
 // ---------------------------------------------------------------------------
 
-export type UploadKind = "MARKSHEET" | "RESUME" | "PHOTO";
+export type UploadKind = "MARKSHEET" | "RESUME" | "PHOTO" | "OFFER_LETTER";
 export interface UploadedFile {
   id: string;
   kind: string;
@@ -450,4 +450,369 @@ export const teamApi = {
   invite: (body: { email: string; role: "STAFF" | "VOLUNTEER"; capabilities: string[]; scope?: { branches?: string[]; batches?: number[] } }) =>
     api<{ inviteId: string }>("/admin/team", { method: "POST", body }),
   remove: (userId: string, role: "STAFF" | "VOLUNTEER") => api<void>(`/admin/team/${userId}/${role}`, { method: "DELETE" }),
+};
+
+// ---------------------------------------------------------------------------
+// Drives (BACKEND-DESIGN.md §9.6)
+// ---------------------------------------------------------------------------
+
+export interface Round {
+  id?: string;
+  sequence?: number;
+  type: RoundType;
+  title: string;
+  mode: "OFFLINE" | "ONLINE";
+  startsAt: string | null;
+  endsAt?: string | null;
+  venue: string | null;
+  onlineLink: string | null;
+  instructions: string | null;
+  status?: "SCHEDULED" | "IN_PROGRESS" | "RESULTS_PENDING" | "RESULTS_PUBLISHED" | "CANCELLED";
+  /** Student view only: my part in this round. */
+  my?: {
+    attended: boolean;
+    result: ResultValue | null;
+    out: "ABSENT" | "NOT_SELECTED" | null;
+    checkInOpen: boolean;
+    line: MyLine | null;
+    feedback: string[];
+  } | null;
+}
+
+export interface DriveBasics {
+  roleTitle: string;
+  description: string;
+  jobType: JobType;
+  ctcLpa: number | null;
+  stipendMonthly: number | null;
+  location: string | null;
+  bondMonths: number | null;
+  optInDeadline: string | null;
+  eligibility: Eligibility;
+}
+
+export interface OfficeDrive extends DriveBasics {
+  id: string;
+  company: { id: string; name: string; status: string };
+  status: DriveStatus;
+  rejectionReason: string | null;
+  approvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  rounds: Round[];
+  missing: string[];
+  counts: { invited: number; joined: number; skipped: number; total: number };
+  can: { edit: boolean; editLimited: boolean; editRounds: boolean; submit: boolean; withdraw: boolean; decide: boolean; invite: boolean; cancel: boolean; delete: boolean };
+}
+
+export interface DriveListItem {
+  id: string;
+  company: { id: string; name: string };
+  roleTitle: string;
+  jobType: JobType;
+  ctcLpa: number | null;
+  stipendMonthly: number | null;
+  status: DriveStatus;
+  optInDeadline: string | null;
+  rounds: number;
+  invited: number;
+  joined: number;
+  updatedAt: string;
+}
+
+export interface EligibleStudent {
+  id: string;
+  name: string;
+  rollNo: string;
+  branch: string;
+  batch: number;
+  cgpa: number | null;
+  activeBacklogs: number | null;
+  inDrive: ParticipationStatus | null;
+}
+
+export interface Participant extends Omit<EligibleStudent, "inDrive"> {
+  status: ParticipationStatus;
+  invitedAt: string;
+  respondedAt: string | null;
+}
+
+export interface MyState {
+  status: ParticipationStatus;
+  canJoin: boolean;
+  canSkip: boolean;
+}
+
+export interface MyDriveCard {
+  id: string;
+  company: string;
+  roleTitle: string;
+  jobType: JobType;
+  ctcLpa: number | null;
+  stipendMonthly: number | null;
+  location: string | null;
+  status: DriveStatus;
+  optInDeadline: string | null;
+  rounds: number;
+  nextRound: { title: string; startsAt: string | null } | null;
+  me: MyState;
+}
+
+export interface OtherDrive {
+  id: string;
+  company: string;
+  roleTitle: string;
+  jobType: JobType;
+  status: DriveStatus;
+}
+
+export type StudentDriveView =
+  | (OtherDrive & { inDrive: false })
+  | (Omit<DriveBasics, "eligibility"> & {
+      id: string;
+      inDrive: true;
+      company: string;
+      companyWebsite: string | null;
+      companyAbout: string | null;
+      status: DriveStatus;
+      cancelReason: string | null;
+      eligibility: Eligibility;
+      rounds: Round[];
+      me: MyState & { invitedAt: string; respondedAt: string | null };
+      offer: OfferView | null;
+    });
+
+export const drivesApi = {
+  list: () => api<{ companies: { id: string; name: string }[] | null; drives: DriveListItem[] }>("/drives"),
+  get: (id: string) => api<OfficeDrive>(`/drives/${id}`),
+  create: (body: Partial<DriveBasics> & { roleTitle: string; companyId?: string }) => api<OfficeDrive>("/drives", { method: "POST", body }),
+  update: (id: string, body: Partial<DriveBasics>) => api<OfficeDrive>(`/drives/${id}`, { method: "PATCH", body }),
+  remove: (id: string) => api<void>(`/drives/${id}`, { method: "DELETE" }),
+  saveRounds: (id: string, rounds: Round[]) =>
+    api<OfficeDrive>(`/drives/${id}/rounds`, { method: "PUT", body: { rounds: rounds.map(withoutServerFields) } }),
+  submit: (id: string) => api<OfficeDrive>(`/drives/${id}/submit`, { method: "POST" }),
+  withdraw: (id: string) => api<OfficeDrive>(`/drives/${id}/withdraw`, { method: "POST" }),
+  approve: (id: string) => api<OfficeDrive>(`/admin/drives/${id}/approve`, { method: "POST" }),
+  reject: (id: string, reason: string) => api<OfficeDrive>(`/admin/drives/${id}/reject`, { method: "POST", body: { reason } }),
+  cancel: (id: string, reason: string) => api<OfficeDrive>(`/admin/drives/${id}/cancel`, { method: "POST", body: { reason } }),
+  preview: (id: string, eligibility?: Eligibility) =>
+    api<{ count: number; students: EligibleStudent[] }>(`/drives/${id}/eligibility/preview`, { method: "POST", body: eligibility ? { eligibility } : {} }),
+  invite: (id: string, body: { all?: boolean; studentIds?: string[] }) => api<{ invited: number; alreadyIn: number }>(`/drives/${id}/invitations`, { method: "POST", body }),
+  participants: (id: string) => api<{ participants: Participant[] }>(`/drives/${id}/participants`),
+  uninvite: (id: string, studentId: string) => api<void>(`/drives/${id}/invitations/${studentId}`, { method: "DELETE" }),
+  companies: () => api<{ companies: { id: string; name: string; status: string }[] }>("/admin/companies"),
+  addCompany: (body: { name: string; website?: string | null; industry?: string | null }) => api<{ id: string; name: string }>("/admin/companies", { method: "POST", body }),
+  mine: () => api<{ mine: MyDriveCard[]; others: OtherDrive[] }>("/me/drives"),
+  mineOne: (id: string) => api<StudentDriveView>(`/me/drives/${id}`),
+  join: (id: string) => api<StudentDriveView>(`/me/drives/${id}/opt-in`, { method: "POST", body: { consent: true } }),
+  skip: (id: string) => api<StudentDriveView>(`/me/drives/${id}/opt-out`, { method: "POST" }),
+};
+
+/** The rounds API takes what the builder edits, not the server-owned order and status. */
+function withoutServerFields(r: Round): Round {
+  const copy = { ...r };
+  delete copy.sequence;
+  delete copy.status;
+  return copy;
+}
+
+// ---------------------------------------------------------------------------
+// Running rounds: attendance and results (BACKEND-DESIGN.md §9.8, §9.9)
+// ---------------------------------------------------------------------------
+
+export interface RoundStudent {
+  id: string;
+  participationId: string;
+  name: string;
+  rollNo: string;
+  branch: string;
+  batch: number;
+  cgpa: number | null;
+  status: ParticipationStatus;
+  present: boolean;
+  attendance: { method: "QR" | "MANUAL"; createdAt: string; reason: string | null } | null;
+  result: ResultValue;
+  source: "MANUAL" | "IMPORT" | null;
+}
+
+export interface RoundView {
+  id: string;
+  sequence: number;
+  type: RoundType;
+  title: string;
+  mode: "OFFLINE" | "ONLINE";
+  startsAt: string | null;
+  venue: string | null;
+  venueLat: number | null;
+  venueLng: number | null;
+  venueRadiusM: number | null;
+  status: NonNullable<Round["status"]>;
+  hasResults: boolean;
+  isLast: boolean;
+  drive: { id: string; roleTitle: string; company: { id: string; name: string }; status: DriveStatus };
+  session: { id: string; openedAt: string; venueLat: number | null; venueLng: number | null; radiusM: number | null } | null;
+  tookAttendance: boolean;
+  students: RoundStudent[];
+  counts: { total: number; present: number; pending: number; onHold: number; selected: number };
+  can: { start: boolean; startBlockedBy: string | null; attendance: boolean; manual: boolean; results: boolean; publish: boolean };
+}
+
+export interface CheckInResult {
+  checkedIn: true;
+  alreadyCheckedIn: boolean;
+  round: string;
+  company: string;
+  roleTitle: string;
+  driveId: string;
+}
+
+export const roundsApi = {
+  get: (id: string) => api<RoundView>(`/rounds/${id}`),
+  start: (id: string) => api<RoundView>(`/rounds/${id}/start`, { method: "POST" }),
+  setResults: (id: string, results: { participationId: string; result: ResultValue }[]) => api<RoundView>(`/rounds/${id}/results`, { method: "PUT", body: { results } }),
+  importCsv: (id: string, csv: string) =>
+    api<{ round: RoundView; imported: number; unknownRolls: string[]; badValues: { row: number; value: string }[] }>(`/rounds/${id}/results/import`, { method: "POST", body: { csv } }),
+  publish: (id: string) => api<RoundView>(`/rounds/${id}/results/publish`, { method: "POST" }),
+  openCheckIn: (id: string, body: { lat?: number | null; lng?: number | null; radiusM?: number | null }) =>
+    api<{ id: string }>(`/rounds/${id}/attendance/sessions`, { method: "POST", body }),
+  qr: (sid: string) => api<{ token: string; url: string; expiresInMs: number; present: number }>(`/attendance/sessions/${sid}/qr`),
+  closeCheckIn: (sid: string) => api<RoundView>(`/attendance/sessions/${sid}/close`, { method: "POST" }),
+  manual: (id: string, body: { participationId: string; present: boolean; reason: string }) => api<RoundView>(`/rounds/${id}/attendance/manual`, { method: "POST", body }),
+  checkIn: (body: { token: string; lat?: number | null; lng?: number | null }) => api<CheckInResult>("/attendance/check-in", { method: "POST", body }),
+};
+
+// ---------------------------------------------------------------------------
+// Interview panels and the live line (BACKEND-DESIGN.md §9.10)
+// ---------------------------------------------------------------------------
+
+export type QueueStatus = "WAITING" | "CALLED" | "IN_INTERVIEW" | "DONE" | "SKIPPED" | "ABSENT";
+export type Recommendation = "SELECT" | "REJECT" | "HOLD";
+
+export interface MyLine {
+  roundId: string;
+  panel: string;
+  location: string | null;
+  status: QueueStatus;
+  position: number | null;
+  waitMinutes: number | null;
+}
+
+export interface PanelPerson {
+  id: string;
+  name: string | null;
+  email: string;
+  role: "HR" | "INTERVIEWER";
+}
+
+export interface PanelSummary {
+  id: string;
+  name: string;
+  location: string | null;
+  members: { id: string; name: string | null; email: string }[];
+  counts: { waiting: number; live: number; done: number; absent: number; total: number };
+  avgMinutes: number;
+}
+
+export interface QueueRow {
+  id: string;
+  status: QueueStatus;
+  position: number;
+  skipCount: number;
+  calledAt: string | null;
+  student: {
+    id: string;
+    name: string;
+    rollNo: string;
+    branch: string;
+    batch: number;
+    cgpa: number | null;
+    activeBacklogs: number | null;
+    skills: string[];
+    links: { label: string; url: string }[] | null;
+    resumeFileId: string | null;
+  };
+  session: { id: string; startedAt: string; endedAt: string | null; privateNotes: string | null; recommendation: Recommendation | null } | null;
+  feedback: { text: string; status: string } | null;
+}
+
+export interface PanelView {
+  id: string;
+  name: string;
+  location: string | null;
+  round: { id: string; title: string; status: string; driveId: string; roleTitle: string; company: string };
+  running: boolean;
+  avgMinutes: number;
+  current: QueueRow | null;
+  waiting: QueueRow[];
+  done: QueueRow[];
+}
+
+export interface FeedbackItem {
+  id: string;
+  student: { name: string; rollNo: string };
+  round: string | null;
+  author: string | null;
+  text: string;
+  releasedText: string | null;
+  status: "PENDING_REVIEW" | "RELEASED" | "EDITED_AND_RELEASED" | "WITHHELD";
+  createdAt: string;
+}
+
+export const interviewsApi = {
+  panels: (roundId: string) => api<{ panels: PanelSummary[] }>(`/rounds/${roundId}/panels`),
+  people: (roundId: string) => api<{ people: PanelPerson[] }>(`/rounds/${roundId}/panel-people`),
+  addPanel: (roundId: string, body: { name: string; location?: string | null; memberIds: string[] }) => api<{ panels: PanelSummary[] }>(`/rounds/${roundId}/panels`, { method: "POST", body }),
+  removePanel: (panelId: string) => api<{ panels: PanelSummary[] }>(`/panels/${panelId}`, { method: "DELETE" }),
+  buildLine: (roundId: string) => api<{ added: number; panels: PanelSummary[] }>(`/rounds/${roundId}/queue`, { method: "POST" }),
+  recommendations: (roundId: string) =>
+    api<{ interviews: { participationId: string; panel: string; status: QueueStatus; recommendation: Recommendation | null; privateNotes: string | null }[] }>(`/rounds/${roundId}/interviews`),
+  myPanels: () =>
+    api<{ panels: { id: string; name: string; location: string | null; round: { title: string; status: string; startsAt: string | null; roleTitle: string; company: string }; waiting: number; done: number }[] }>("/me/panels"),
+  panel: (panelId: string) => api<PanelView>(`/panels/${panelId}`),
+  callNext: (panelId: string) => api<PanelView>(`/panels/${panelId}/call-next`, { method: "POST" }),
+  start: (entryId: string) => api<PanelView>(`/queue/${entryId}/start`, { method: "POST" }),
+  end: (entryId: string, body: { privateNotes?: string | null; recommendation?: Recommendation | null; feedback?: string | null }) => api<PanelView>(`/queue/${entryId}/end`, { method: "POST", body }),
+  skip: (entryId: string) => api<PanelView>(`/queue/${entryId}/skip`, { method: "POST" }),
+  requeue: (entryId: string) => api<PanelView>(`/queue/${entryId}/requeue`, { method: "POST" }),
+  move: (entryId: string, panelId: string) => api<PanelView>(`/queue/${entryId}/move`, { method: "POST", body: { panelId } }),
+  feedback: (driveId: string) => api<{ feedback: FeedbackItem[] }>(`/drives/${driveId}/feedback`),
+  reviewFeedback: (id: string, body: { action: "RELEASE" | "WITHHOLD"; text?: string | null }) => api<{ feedback: FeedbackItem[] }>(`/admin/feedback/${id}`, { method: "POST", body }),
+  companyTeam: () =>
+    api<{ company: string; members: PanelPerson[]; invites: { id: string; email: string; role: string; expiresAt: string }[] }>("/company/team"),
+  inviteInterviewer: (email: string) => api<{ inviteId: string }>("/company/team", { method: "POST", body: { email } }),
+};
+
+// ---------------------------------------------------------------------------
+// Offers (BACKEND-DESIGN.md §9.11)
+// ---------------------------------------------------------------------------
+
+export interface OfferView {
+  id: string;
+  status: "SENT" | "ACCEPTED" | "DECLINED" | "EXPIRED" | "REVOKED";
+  roleTitle: string;
+  ctcLpa: number | null;
+  joiningDate: string | null;
+  respondBy: string;
+  respondedAt: string | null;
+  revokeReason: string | null;
+  sentAt: string;
+  updatedAt: string;
+}
+
+export interface OffersList {
+  drive: { id: string; roleTitle: string; ctcLpa: number | null; status: DriveStatus };
+  responseDays: number;
+  canSend: boolean;
+  selected: { participationId: string; status: ParticipationStatus; student: { name: string; rollNo: string; branch: string; batch: number }; offer: (OfferView & { fileName: string }) | null }[];
+}
+
+export const offersApi = {
+  list: (driveId: string) => api<OffersList>(`/drives/${driveId}/offers`),
+  send: (driveId: string, body: { participationId: string; fileId: string; ctcLpa?: number | null; joiningDate?: string | null; respondBy?: string | null }) =>
+    api<OffersList>(`/drives/${driveId}/offers`, { method: "POST", body }),
+  revoke: (offerId: string, reason: string) => api<OffersList>(`/offers/${offerId}/revoke`, { method: "POST", body: { reason } }),
+  letter: (offerId: string) => api<{ url: string; expiresInSeconds: number }>(`/offers/${offerId}/letter`),
+  accept: (offerId: string) => api<{ status: string }>(`/me/offers/${offerId}/accept`, { method: "POST" }),
+  decline: (offerId: string) => api<{ status: string }>(`/me/offers/${offerId}/decline`, { method: "POST" }),
+  closeDrive: (driveId: string) => api<{ status: string }>(`/admin/drives/${driveId}/close`, { method: "POST" }),
 };

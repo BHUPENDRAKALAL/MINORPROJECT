@@ -1,13 +1,13 @@
 // Adapted from Foundry (Apache-2.0), see src/vendor/foundry/LICENSE
 // Foundry's frame (base.html): a side bar with no top bar on a desk, and a bar along the bottom on anything smaller.
 import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
+import { Link, Outlet, useLocation, useNavigate } from "react-router";
 import type { Role } from "@cyrus/shared";
 import { Avatar, BrandMark, Icon } from "../components/ui";
 import { APP_NAME } from "../lib/brand";
 import { ROLE_LABELS, ROLE_PRIORITY } from "../lib/constants";
 import { useAuth } from "./useAuth";
-import { homeFor, navFor, type NavItem } from "./nav";
+import { homeFor, isCurrent, navFor, type NavItem } from "./nav";
 import { useTheme } from "./theme";
 import { useSidePanel } from "./useSidePanel";
 
@@ -30,22 +30,24 @@ function useCloseOnNavigate() {
 }
 
 function NavRow({ item }: { item: NavItem }) {
+  const { pathname } = useLocation();
   return (
     <li className={`fam-${item.family}`}>
-      <NavLink className="nav-item" to={item.to} end>
+      <Link className="nav-item" to={item.to} aria-current={isCurrent(item, pathname) ? "page" : undefined}>
         <Icon name={item.icon} />
         <span className="nav-name">{item.label}</span>
-      </NavLink>
+      </Link>
     </li>
   );
 }
 
 function Tab({ item }: { item: NavItem }) {
+  const { pathname } = useLocation();
   return (
-    <NavLink className="tab" to={item.to} end aria-label={item.title ?? item.label}>
+    <Link className="tab" to={item.to} aria-label={item.title ?? item.label} aria-current={isCurrent(item, pathname) ? "page" : undefined}>
       <Icon name={item.icon} />
       <span className="tab-name">{item.label}</span>
-    </NavLink>
+    </Link>
   );
 }
 
@@ -156,7 +158,7 @@ export default function Shell({ children }: { children?: ReactNode }) {
   // The bottom bar holds four pages and More; with five or fewer pages, all of them fit.
   const inBar = items.length <= 5 ? items : items.slice(0, 4);
   const inMore = items.length <= 5 ? [] : items.slice(4);
-  const moreCurrent = inMore.some((i) => i.to === location.pathname);
+  const moreCurrent = inMore.some((i) => isCurrent(i, location.pathname));
   const side = useSidePanel();
   // Open: the chosen width. Folded: Foundry's own rail width (set by its :has(.side-toggle:checked) rule).
   const shellStyle = side.folded ? undefined : ({ "--sidebar": `${side.width}px` } as CSSProperties);

@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import { Worker } from "bullmq";
 import { QUEUES, type QueueKey } from "@cyrus/shared";
 import { loadEnv } from "../config/env.ts";
@@ -55,7 +56,18 @@ const workers = keys.map((key) => {
 
 console.log(`[worker] serving queues: ${keys.join(", ")}`);
 
+// Small health endpoint (for k8s/Docker probes and the end-to-end test runner). Port 0/unset = off.
+const healthPort = Number(process.env["WORKER_HEALTH_PORT"] ?? 0);
+const health = healthPort
+  ? createServer((req, res) => {
+      const ok = workers.every((w) => w.isRunning());
+      res.writeHead(req.url === "/health" && ok ? 200 : 503, { "content-type": "application/json" });
+      res.end(JSON.stringify({ status: ok ? "ok" : "not_running", queues: keys }));
+    }).listen(healthPort, () => console.log(`[worker] health on :${healthPort}/health`))
+  : null;
+
 onShutdown((m) => console.log(`[worker] ${m}`), async () => {
+  health?.close();
   await Promise.all(workers.map((w) => w.close()));
   await db.$disconnect();
   connection.disconnect();

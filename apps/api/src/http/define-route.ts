@@ -59,6 +59,8 @@ export interface MountContext {
   appSecret: string;
   /** Rate-limit store per route (Redis in production, memory in tests). */
   makeStore?: (prefix: string) => Store;
+  /** False only for automated end-to-end runs in development (see ROUTE_LIMITS). */
+  routeLimits?: boolean;
 }
 
 function parse<T extends ZodType>(schema: T | undefined, value: unknown, where: string): z.infer<T> {
@@ -86,7 +88,7 @@ export function mountRoutes(router: Router, registry: OpenAPIRegistry, prefix: s
     if (!def.access) throw new Error(`Route ${def.method} ${def.path} has no access rule`);
 
     const middlewares: RequestHandler[] = [];
-    if (def.limit) {
+    if (def.limit && ctx.routeLimits !== false) {
       const routeKey = `${def.method}:${def.path}`;
       middlewares.push(
         rateLimit({

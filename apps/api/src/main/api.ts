@@ -14,12 +14,13 @@ const env = loadEnv();
 const log = createLogger(env, "api");
 const db = createDb(env.DATABASE_URL);
 const redis = createRedis(env.REDIS_URL);
+const limitsRedis = createRedis(env.REDIS_URL, "limits");
 // Producers need a connection that waits for Redis instead of failing fast.
 const queueRedis = createRedis(env.REDIS_URL, "queue");
 const queues = createQueues(queueRedis);
 const storage = s3Storage(env);
 await storage.ensureReady().catch((e: Error) => log.warn({ err: e }, "file storage not reachable yet; uploads will fail until it is"));
-const app = buildApp({ env, log, db, redis, mailer: queueMailer(queues), storage, enqueue: queueEnqueue(queues) });
+const app = buildApp({ env, log, db, redis, limitsRedis, mailer: queueMailer(queues), storage, enqueue: queueEnqueue(queues) });
 
 const server = app.listen(env.API_PORT, () => log.info(`API listening on :${env.API_PORT} (docs: /api/docs)`));
 
@@ -28,5 +29,6 @@ onShutdown((m) => log.info(m), async () => {
   await closeQueues(queues);
   await db.$disconnect();
   redis.disconnect();
+  limitsRedis.disconnect();
   queueRedis.disconnect();
 });

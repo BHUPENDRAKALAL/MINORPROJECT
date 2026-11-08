@@ -283,10 +283,28 @@ export default function StudentProfile() {
   const [detailsSaved, setDetailsSaved] = useState(false);
   const [d, setD] = useState({ name: "", phone: "", skills: "" });
 
-  const apply = useCallback((v: StudentProfileView) => {
+  // Requests can finish out of order (e.g. "Save marks" then a quick "Send"). Only the newest one updates the page.
+  const latest = useRef(0);
+  const applyNow = useCallback((v: StudentProfileView) => {
     setView(v);
     setD({ name: v.profile.name, phone: v.profile.phone ?? "", skills: v.profile.skills.join(", ") });
   }, []);
+  const track = useCallback(
+    async (p: Promise<StudentProfileView>) => {
+      const id = ++latest.current;
+      const v = await p;
+      if (id === latest.current) applyNow(v);
+      return v;
+    },
+    [applyNow],
+  );
+  /** Background refresh: never overrides an action that started after it. */
+  const refreshQuietly = useCallback(async () => {
+    const id = latest.current;
+    const v = await studentApi.get();
+    if (id === latest.current) applyNow(v);
+  }, [applyNow]);
+  const apply = applyNow;
 
   useEffect(() => {
     studentApi
@@ -298,9 +316,9 @@ export default function StudentProfile() {
   // While a file is being virus-checked, look again every few seconds.
   useEffect(() => {
     if (!view?.documents.some((x) => x.file.scanStatus === "PENDING")) return;
-    const t = setTimeout(() => void studentApi.get().then(setView).catch(() => undefined), 3000);
+    const t = setTimeout(() => void refreshQuietly().catch(() => undefined), 3000);
     return () => clearTimeout(t);
-  }, [view]);
+  }, [view, refreshQuietly]);
 
   if (loadError) return <EmptyState sprite="blocked" family="ember">{loadError}</EmptyState>;
   if (!view) {
@@ -319,11 +337,11 @@ export default function StudentProfile() {
 
   const upload = (type: StudentDocument["type"], semester?: number) => async (file: File) => {
     const f = await filesApi.upload("MARKSHEET", file);
-    apply(await studentApi.addDocument({ fileId: f.id, type, semester }));
+    await track(studentApi.addDocument({ fileId: f.id, type, semester }));
   };
-  const remove = (id: string) => async () => apply(await studentApi.removeDocument(id));
-  const after = async (v: StudentProfileView) => {
-    apply(v);
+  const remove = (id: string) => async () => void (await track(studentApi.removeDocument(id)));
+  const after = async (p: Promise<StudentProfileView>) => {
+    await track(p);
     await reloadMe();
   };
 
@@ -336,7 +354,7 @@ export default function StudentProfile() {
         <h1 className="title">My profile</h1>
       </header>
 
-      <StatusBanner view={view} busy={action.busy} onWithdraw={() => void action.run(async () => after(await studentApi.withdraw()))} />
+      <StatusBanner view={view} busy={action.busy} onWithdraw={() => void action.run(async () => after(studentApi.withdraw()))} />
       {action.error && <Alert>{action.error}</Alert>}
       <Timeline view={view} />
 
@@ -362,8 +380,8 @@ export default function StudentProfile() {
             e.preventDefault();
             setDetailsSaved(false);
             void details.run(async () => {
-              apply(
-                await studentApi.update({
+              await track(
+                studentApi.update({
                   name: d.name,
                   phone: d.phone.trim() || null,
                   skills: d.skills.split(",").map((x) => x.trim()).filter(Boolean),
@@ -426,7 +444,7 @@ export default function StudentProfile() {
                 withNote
                 submitLabel="Send change request"
                 onSave={async (v) => {
-                  apply(await studentApi.requestUpdate(v));
+                  await track(studentApi.requestUpdate(v));
                   setShowChange(false);
                 }}
               />
@@ -444,7 +462,7 @@ export default function StudentProfile() {
             initial={view.draft}
             disabled={!view.canEdit}
             submitLabel="Save marks"
-            onSave={async (v) => apply(await studentApi.saveAcademics(v))}
+            onSave={async (v) => void (await track(studentApi.saveAcademics(v)))}
           />
         )}
       </Section>
@@ -512,7 +530,7 @@ export default function StudentProfile() {
               type="button"
               className="primary"
               disabled={!!view.missing.length || action.busy}
-              onClick={() => void action.run(async () => after(await studentApi.submit()))}
+              onClick={() => void action.run(async () => after(studentApi.submit()))}
             >
               {action.busy ? "Sending…" : p.status === "REJECTED" ? "Send again for verification" : "Send for verification"}
             </button>

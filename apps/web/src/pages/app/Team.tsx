@@ -28,7 +28,9 @@ export default function Team() {
   const form = useApiForm();
   const list = useApiForm();
 
-  const load = useCallback(() => void list.run(async () => setData(await teamApi.list())), [list]);
+  // `run` is stable; depending on the whole form object re-ran this effect on every render (endless reloads).
+  const runList = list.run;
+  const load = useCallback(() => void runList(async () => setData(await teamApi.list())), [runList]);
   useEffect(load, [load]);
 
   async function invite(e: FormEvent) {

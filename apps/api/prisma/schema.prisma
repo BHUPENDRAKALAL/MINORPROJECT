@@ -709,12 +709,15 @@ model DriveCoordinator {
   @@id([driveId, userId])
 }
 
+/// Kind of round. The same kind can repeat in one drive ("Technical round 2", "Interview round 3"):
+/// the shown name lives in Round.title.
 enum RoundType {
   PPT
   OA
   GD
-  TECHNICAL_INTERVIEW
-  HR_INTERVIEW
+  TECHNICAL
+  INTERVIEW
+  HR
   OTHER
 }
 
@@ -738,7 +741,8 @@ model Round {
   type               RoundType
   title              String
   mode               RoundMode   @default(OFFLINE)
-  startsAt           DateTime
+  /// Null = "date to be announced" (allowed while the drive is a draft or for later rounds)
+  startsAt           DateTime?
   endsAt             DateTime?
   venue              String?
   venueLat           Float?

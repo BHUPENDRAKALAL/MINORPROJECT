@@ -25,3 +25,7 @@ dist-ssr
 
 # Review screenshots (not committed)
 .review/
+
+# end-to-end test output
+e2e-report/
+e2e-results/

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ApiError, NETWORK_ERROR_MESSAGE } from "../lib/api";
 
 export type FieldErrors = Record<string, string>;
@@ -50,5 +50,6 @@ export function useApiForm() {
     });
   }, []);
 
-  return { busy, error, errorCode, fieldErrors, run, clearField, setError };
+  // One stable object per state change, so pages can safely list it (or its functions) in effect dependencies.
+  return useMemo(() => ({ busy, error, errorCode, fieldErrors, run, clearField, setError }), [busy, error, errorCode, fieldErrors, run, clearField]);
 }

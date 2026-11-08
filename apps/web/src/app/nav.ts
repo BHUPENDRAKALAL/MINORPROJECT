@@ -26,6 +26,15 @@ export interface NavItem {
   sprite?: SpriteName;
   /** Only these roles see the item (inside a shared nav such as the placement office's). */
   only?: Role[];
+  /** Pages under this path also mark the item current (for an item whose own path is the area's home). */
+  under?: string;
+}
+
+/** The nav item is current on its own page and on the pages under it (a drive under Drives). */
+export function isCurrent(item: NavItem, pathname: string): boolean {
+  if (pathname === item.to) return true;
+  const root = item.under ?? (item.to.split("/").length > 2 ? item.to : null);
+  return root !== null && pathname.startsWith(root + "/");
 }
 
 export interface NavArea {
@@ -84,7 +93,7 @@ export const OFFICE_AREA: NavArea = {
       sprite: "designer",
     },
     {
-      key: "drives", to: "/office/drives", label: "Drives", icon: "jobs", family: "lime",
+      key: "drives", to: "/office/drives", label: "Drives", icon: "jobs", family: "lime", only: ["TPO"],
       empty: "Placement drives from draft to results: eligibility, shortlists, rounds and offers.",
       sprite: "smith",
     },
@@ -105,16 +114,8 @@ export const COMPANY_AREA: NavArea = {
   base: "/company",
   roles: ["COMPANY_HR"],
   items: [
-    {
-      key: "overview", to: "/company", label: "Overview", icon: "overview", family: "lime",
-      empty: "Your drives at a glance: applicants, rounds in progress and offers made.",
-      sprite: "smith",
-    },
-    {
-      key: "drives", to: "/company/drives", label: "Drives", icon: "jobs", family: "azure",
-      empty: "Drives you create with the placement office will be here, with their eligibility, rounds and shortlists.",
-      sprite: "designer",
-    },
+    // HR's home is their drives list.
+    { key: "drives", to: "/company", label: "Drives", icon: "jobs", family: "azure", under: "/company/drives" },
     {
       key: "team", to: "/company/team", label: "Team", icon: "activity", family: "sun",
       empty: "Colleagues and interviewers you invite will be listed here.",
@@ -134,7 +135,7 @@ export const INTERVIEWER_AREA: NavArea = {
   roles: ["INTERVIEWER"],
   items: [
     {
-      key: "panel", to: "/interviewer", label: "My panel", icon: "panel", family: "orchid",
+      key: "panel", to: "/interviewer", label: "My panels", icon: "panel", family: "orchid", under: "/panel",
       empty: "On interview day, the queue of students for your panel will appear here, with each student's profile and a form for your feedback.",
       sprite: "reviewer",
     },

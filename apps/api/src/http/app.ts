@@ -27,12 +27,22 @@ import { studentRoutes } from "../modules/students/routes.ts";
 import { createReviewService } from "../modules/review/service.ts";
 import { reviewRoutes } from "../modules/review/routes.ts";
 import { teamRoutes } from "../modules/team/routes.ts";
+import { createDrivesService } from "../modules/drives/service.ts";
+import { driveRoutes } from "../modules/drives/routes.ts";
+import { createRoundsService } from "../modules/rounds/service.ts";
+import { roundRoutes } from "../modules/rounds/routes.ts";
+import { createInterviewsService } from "../modules/interviews/service.ts";
+import { interviewRoutes } from "../modules/interviews/routes.ts";
+import { createOffersService } from "../modules/offers/service.ts";
+import { offerRoutes } from "../modules/offers/routes.ts";
 
 export interface AppDeps {
   env: Env;
   log: Logger;
   db?: Db;
   redis?: Redis;
+  /** Connection used by the rate limiters (see RedisMode "limits"). Falls back to `redis`. */
+  limitsRedis?: Redis;
   /** How emails leave the API (queue in production, memory in tests). Needed for auth routes. */
   mailer?: Mailer;
   /** Private file storage (S3-compatible; memory in tests). Needed for uploads and reviews. */
@@ -41,6 +51,8 @@ export interface AppDeps {
   enqueue?: Enqueue;
   /** Tests can fix the "random" spot-check roll. */
   random?: () => number;
+  /** Tests can fix the clock (rotating check-in QR). */
+  now?: () => number;
 }
 
 const PREFIX = "/api/v1";
@@ -52,8 +64,9 @@ export function buildApp(deps: AppDeps): Express {
   app.disable("x-powered-by");
   app.set("trust proxy", 1);
 
+  const limits = deps.limitsRedis ?? deps.redis;
   const redisStore = (prefix: string) =>
-    new RedisStore({ prefix, sendCommand: (command: string, ...args: string[]) => deps.redis!.call(command, ...args) as Promise<RedisReply> });
+    new RedisStore({ prefix, sendCommand: (command: string, ...args: string[]) => limits!.call(command, ...args) as Promise<RedisReply> });
 
   app.use(pinoHttp({ logger: log, genReqId: (req) => (req.headers["x-request-id"] as string) || crypto.randomUUID() }));
   app.use(helmet());
@@ -76,13 +89,21 @@ export function buildApp(deps: AppDeps): Express {
   // Routes. Feature modules are added here as they are built.
   const registry = new OpenAPIRegistry();
   registry.registerComponent("securitySchemes", "bearerAuth", { type: "http", scheme: "bearer", bearerFormat: "JWT" });
-  const ctx: MountContext = { db: deps.db, appSecret: env.APP_SECRET, ...(deps.redis ? { makeStore: redisStore } : {}) };
+  const routeLimits = !(env.ROUTE_LIMITS === "off" && env.NODE_ENV !== "production");
+  if (!routeLimits) log.warn("Per-route rate limits are OFF (ROUTE_LIMITS=off). Only for automated tests in development.");
+  const ctx: MountContext = { db: deps.db, appSecret: env.APP_SECRET, routeLimits, ...(deps.redis ? { makeStore: redisStore } : {}) };
   const v1 = express.Router();
   mountRoutes(v1, registry, PREFIX, healthRoutes({ db: deps.db, redis: deps.redis, log, showErrors: env.NODE_ENV !== "production" }), ctx);
   if (deps.db && deps.mailer) {
     const service = createAuthService({ db: deps.db, mailer: deps.mailer, env });
     mountRoutes(v1, registry, PREFIX, authRoutes({ service, cookieSecure: env.COOKIE_SECURE }), ctx);
     mountRoutes(v1, registry, PREFIX, teamRoutes(deps.db, service), ctx);
+    const interviews = createInterviewsService({ db: deps.db, mailer: deps.mailer, env, now: deps.now });
+    const offers = deps.storage ? createOffersService({ db: deps.db, mailer: deps.mailer, storage: deps.storage, env, now: deps.now }) : null;
+    mountRoutes(v1, registry, PREFIX, driveRoutes(createDrivesService({ db: deps.db, mailer: deps.mailer, env, myLine: interviews.myLine, myOffer: offers?.mine })), ctx);
+    if (offers) mountRoutes(v1, registry, PREFIX, offerRoutes(offers), ctx);
+    mountRoutes(v1, registry, PREFIX, roundRoutes(createRoundsService({ db: deps.db, mailer: deps.mailer, env, now: deps.now })), ctx);
+    mountRoutes(v1, registry, PREFIX, interviewRoutes(interviews, service, deps.db), ctx);
     if (deps.storage && deps.enqueue) {
       const files = createFilesService({ db: deps.db, storage: deps.storage, enqueue: deps.enqueue });
       mountRoutes(v1, registry, PREFIX, filesRoutes(files, env.UPLOAD_MAX_MB), ctx);

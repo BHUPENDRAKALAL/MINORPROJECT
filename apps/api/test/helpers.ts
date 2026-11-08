@@ -38,13 +38,13 @@ export async function resetDb(db: Db): Promise<void> {
  * A fresh app per test: fresh rate-limit counters, an inbox to read codes from, in-memory file storage,
  * a recorder for background jobs, and a fixed "random" roll for spot checks (default: no spot check).
  */
-export function testApp(opts: { random?: () => number } = {}) {
+export function testApp(opts: { random?: () => number; now?: () => number } = {}) {
   const env = testEnv();
   const db = testDb();
   const mailer = memoryMailer();
   const storage = memoryStorage();
   const enqueue = recordingEnqueue();
-  const app = buildApp({ env, log: createLogger(env, "test"), db, mailer, storage, enqueue, random: opts.random ?? (() => 0.99) });
+  const app = buildApp({ env, log: createLogger(env, "test"), db, mailer, storage, enqueue, random: opts.random ?? (() => 0.99), now: opts.now });
   return { app, db, mailer, env, storage, enqueue };
 }
 

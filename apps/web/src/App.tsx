@@ -3,7 +3,7 @@ import { BrowserRouter, Link, Navigate, Outlet, Route, Routes, useLocation } fro
 import type { Role } from "@cyrus/shared";
 import { AuthProvider } from "./app/auth";
 import { useAuth } from "./app/useAuth";
-import { AREAS, homeFor, OFFICE_AREA, STUDENT_AREA, type NavArea } from "./app/nav";
+import { AREAS, COMPANY_AREA, homeFor, INTERVIEWER_AREA, OFFICE_AREA, STUDENT_AREA, type NavArea } from "./app/nav";
 import Shell from "./app/Shell";
 import { EmptyState, ShapeDefs, Sprite } from "./components/ui";
 import { APP_NAME } from "./lib/brand";
@@ -21,6 +21,15 @@ import StudentProfile from "./pages/app/StudentProfile";
 import ReviewQueue from "./pages/app/ReviewQueue";
 import Team from "./pages/app/Team";
 import SystemStatus from "./pages/app/SystemStatus";
+import DriveList from "./pages/app/drives/DriveList";
+import DriveDetail from "./pages/app/drives/DriveDetail";
+import DriveEditor from "./pages/app/drives/DriveEditor";
+import StudentDrives from "./pages/app/drives/StudentDrives";
+import StudentDrive from "./pages/app/drives/StudentDrive";
+import RoundPage from "./pages/app/drives/RoundPage";
+import CheckIn from "./pages/app/drives/CheckIn";
+import PanelScreen from "./pages/app/drives/PanelScreen";
+import { CompanyTeam, MyPanels } from "./pages/app/drives/Interviews";
 
 function Loading() {
   return (
@@ -44,9 +53,17 @@ function RequireAuth() {
 
 /** Public auth pages: someone already signed in goes home. */
 function PublicOnly() {
-  const { status } = useAuth();
+  const { status, me } = useAuth();
+  const location = useLocation();
   if (status === "loading") return <Loading />;
-  if (status === "signedIn") return <Navigate to="/" replace />;
+  if (status === "signedIn") {
+    // Go back to the page that sent the person to sign in (set by RequireAuth), not always home,
+    // but only if this account may open it (the page may have been left by someone else's session).
+    const from = (location.state as { from?: string } | null)?.from;
+    const area = from ? AREAS.find((a) => from === a.base || from.startsWith(a.base + "/")) : undefined;
+    const allowed = !!from && !from.startsWith("/sign-in") && (!area || area.roles.some((r) => me?.roles.includes(r)));
+    return <Navigate to={allowed ? from : "/"} replace />;
+  }
   return <Outlet />;
 }
 
@@ -127,8 +144,30 @@ function pageFor(area: NavArea, key: string) {
   if (area === STUDENT_AREA && key === "profile") return <StudentProfile />;
   if (area === OFFICE_AREA && key === "review") return <ReviewQueue />;
   if (area === OFFICE_AREA && key === "team") return <Team />;
+  if (area === STUDENT_AREA && key === "drives") return <StudentDrives />;
+  if ((area === OFFICE_AREA || area === COMPANY_AREA) && key === "drives") return <DriveList />;
+  if (area === COMPANY_AREA && key === "team") return <CompanyTeam />;
+  if (area === INTERVIEWER_AREA && key === "panel") return <MyPanels />;
   return null;
 }
+
+const DRIVE_OFFICE: Role[] = ["TPO"];
+const DRIVE_HR: Role[] = ["COMPANY_HR"];
+
+/** Pages under a nav item (a drive, its editor). Each opens only for its roles. */
+const SUB_PAGES: { path: string; roles: Role[]; element: ReactNode }[] = [
+  { path: "/office/drives/new", roles: DRIVE_OFFICE, element: <DriveEditor /> },
+  { path: "/office/drives/:id", roles: DRIVE_OFFICE, element: <DriveDetail /> },
+  { path: "/office/drives/:id/edit", roles: DRIVE_OFFICE, element: <DriveEditor /> },
+  { path: "/company/drives/new", roles: DRIVE_HR, element: <DriveEditor /> },
+  { path: "/company/drives/:id", roles: DRIVE_HR, element: <DriveDetail /> },
+  { path: "/company/drives/:id/edit", roles: DRIVE_HR, element: <DriveEditor /> },
+  { path: "/office/drives/:id/rounds/:roundId", roles: DRIVE_OFFICE, element: <RoundPage /> },
+  { path: "/company/drives/:id/rounds/:roundId", roles: DRIVE_HR, element: <RoundPage /> },
+  { path: "/student/drives/:id", roles: ["STUDENT"], element: <StudentDrive /> },
+  { path: "/check-in", roles: ["STUDENT"], element: <CheckIn /> },
+  { path: "/panel/:panelId", roles: ["TPO", "COMPANY_HR", "INTERVIEWER"], element: <PanelScreen /> },
+];
 
 export function AppRoutes() {
   return (
@@ -160,6 +199,9 @@ export function AppRoutes() {
             />
           )),
         )}
+        {SUB_PAGES.map((p) => (
+          <Route key={p.path} path={p.path} element={<RequireRole roles={p.roles}>{p.element}</RequireRole>} />
+        ))}
         <Route path="/account/password" element={<ChangePassword />} />
         <Route path="*" element={<NotFound />} />
       </Route>

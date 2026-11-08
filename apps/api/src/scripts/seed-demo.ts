@@ -11,7 +11,12 @@
  *   new.student@cyrus.test     Student    fresh account, profile empty
  *   pending.student@cyrus.test Student    profile sent, waiting in the review queue
  *   pending.two@cyrus.test     Student    profile sent (CSE 2026), a second task in the queue
- *   verified.student@cyrus.test Student   already verified
+ *   verified.student@cyrus.test Student   already verified, invited to a drive
+ *   hr@cyrus.test          Company HR     Northwind Systems: open drives, one waiting for approval, one draft
+ *   interviewer@cyrus.test Interviewer    Northwind Systems: sits on panels HR adds them to
+ *
+ * Also: a few more verified students (no login needed) so eligibility filters have people to find,
+ * and a second company (Lakeside Labs) with an open drive that verified.student is NOT invited to.
  *
  * Re-running deletes the old @cyrus.test accounts first. Refuses to run in production.
  */
@@ -57,6 +62,14 @@ function pdf(line: string): Buffer {
 }
 
 async function clearOld() {
+  // Demo companies and their drives (rounds and participations go with the drive)
+  const companies = await db.company.findMany({ where: { domain: { endsWith: ".test" } }, select: { id: true } });
+  const companyIds = companies.map((c) => c.id);
+  // Offers and placement records point at drives and students: remove them first.
+  await db.placementRecord.deleteMany({ where: { companyId: { in: companyIds } } });
+  await db.offer.deleteMany({ where: { companyId: { in: companyIds } } });
+  await db.drive.deleteMany({ where: { companyId: { in: companyIds } } });
+  await db.company.deleteMany({ where: { id: { in: companyIds } } });
   const users = await db.user.findMany({ where: { email: { endsWith: DOMAIN } }, select: { id: true } });
   const ids = users.map((u) => u.id);
   if (!ids.length) return;
@@ -117,10 +130,144 @@ async function studentWithDocs(email: string, name: string, rollNo: string, bran
   }
 }
 
+const day = (d: number, hour = 10) => {
+  const t = new Date();
+  t.setDate(t.getDate() + d);
+  t.setHours(hour, 0, 0, 0);
+  return t;
+};
+
+/** More verified students for eligibility filters (they have no documents and nobody signs in as them). */
+async function quietStudents() {
+  const people: [string, string, string, number, number, number][] = [
+    ["Isha Verma", "24UCSE9201", "CSE", 2027, 9.2, 0],
+    ["Karan Singh", "24UCSE9202", "CSE", 2027, 7.4, 0],
+    ["Pooja Nair", "24UIT9203", "IT", 2027, 8.6, 0],
+    ["Rohit Jain", "24UECE9204", "ECE", 2027, 8.9, 0],
+    ["Sneha Rathore", "24UCSE9205", "CSE", 2027, 6.8, 1],
+    ["Vikram Choudhary", "24UME9206", "ME", 2027, 7.9, 0],
+  ];
+  const ids: Record<string, string> = {};
+  for (const [name, rollNo, branch, batch, cgpa, activeBacklogs] of people) {
+    const email = `${name.split(" ")[0]!.toLowerCase()}.quiet${DOMAIN}`;
+    const user = await account(email, name, [{ role: "STUDENT" }]);
+    const p = await db.studentProfile.create({
+      data: { userId: user.id, rollNo, name, branch, batch, status: "VERIFIED", verifiedAt: new Date(), cgpa, activeBacklogs, totalBacklogs: activeBacklogs, tenthPercent: 85, twelfthPercent: 80 },
+    });
+    ids[name] = p.id;
+  }
+  return ids;
+}
+
+async function demoDrives(tpoId: string, hrId: string, verifiedUserId: string, quiet: Record<string, string>) {
+  const northwind = await db.company.create({
+    data: { name: "Northwind Systems", domain: "northwind.test", website: "https://northwind.test", industry: "Software", about: "Builds billing and logistics software for retailers." },
+  });
+  await db.companyMember.create({ data: { companyId: northwind.id, userId: hrId, role: "HR" } });
+  const lakeside = await db.company.create({ data: { name: "Lakeside Labs", domain: "lakeside.test", industry: "Electronics" } });
+
+  // 1. Open drive with five rounds; three students invited, one already joined
+  const swe = await db.drive.create({
+    data: {
+      companyId: northwind.id, createdById: hrId, title: "Software Engineer", roleTitle: "Software Engineer", jobType: "FULL_TIME", ctcLpa: 12, location: "Jaipur", bondMonths: 0,
+      description: "Work on the order and billing services used by 400+ retail stores. You will write Java and TypeScript, review code and help run the services in production. Training for the first two months.",
+      status: "PUBLISHED", approvedById: tpoId, approvedAt: new Date(), optInDeadline: day(4, 18),
+      eligibility: { branches: ["CSE", "IT"], batches: [2027], minCgpa: 7, maxActiveBacklogs: 0 },
+      rounds: {
+        create: [
+          { sequence: 1, type: "OA", title: "Online assessment", mode: "ONLINE", startsAt: day(6, 10), endsAt: day(6, 11), onlineLink: "https://assess.northwind.test/oa", instructions: "90 minutes: 2 coding questions and 20 MCQs. Use a laptop with a webcam." },
+          { sequence: 2, type: "TECHNICAL", title: "Technical round 1", mode: "OFFLINE", startsAt: day(8, 10), venue: "CSE block, Lab 2", instructions: "Data structures and problem solving on paper." },
+          { sequence: 3, type: "TECHNICAL", title: "Technical round 2", mode: "OFFLINE", startsAt: day(8, 14), venue: "CSE block, Lab 2" },
+          { sequence: 4, type: "INTERVIEW", title: "Interview round 1", mode: "OFFLINE", venue: "Placement cell" },
+          { sequence: 5, type: "HR", title: "HR round", mode: "OFFLINE", venue: "Placement cell" },
+        ],
+      },
+    },
+  });
+  const verified = await db.studentProfile.findUniqueOrThrow({ where: { userId: verifiedUserId } });
+  const invites = [
+    [verified.id, "INVITED"],
+    [quiet["Isha Verma"]!, "OPTED_IN"],
+    [quiet["Pooja Nair"]!, "INVITED"],
+  ] as const;
+  for (const [studentId, status] of invites) {
+    const joined = status === "OPTED_IN" ? new Date() : null;
+    await db.participation.create({ data: { driveId: swe.id, studentId, status, invitedById: hrId, respondedAt: joined, consentAt: joined } });
+  }
+
+  // 2. Waiting for the TPO
+  await db.drive.create({
+    data: {
+      companyId: northwind.id, createdById: hrId, title: "Data Analyst Intern", roleTitle: "Data Analyst Intern", jobType: "INTERNSHIP_PPO", stipendMonthly: 30000, location: "Remote",
+      description: "Six-month internship with the analytics team: SQL, dashboards and weekly reports for store managers. A full-time offer for good performers.",
+      status: "PENDING_APPROVAL", optInDeadline: day(10, 18), eligibility: { branches: ["CSE", "IT", "ECE"], batches: [2027], minCgpa: 7.5 },
+      rounds: {
+        create: [
+          { sequence: 1, type: "OA", title: "Online assessment", mode: "ONLINE", startsAt: day(12, 11) },
+          { sequence: 2, type: "GD", title: "Group discussion", mode: "OFFLINE", startsAt: day(14, 10), venue: "Seminar hall" },
+          { sequence: 3, type: "INTERVIEW", title: "Interview round 1", mode: "ONLINE" },
+        ],
+      },
+    },
+  });
+
+  // 3. Draft, no rounds yet
+  await db.drive.create({
+    data: { companyId: northwind.id, createdById: hrId, title: "Cloud Support Associate", roleTitle: "Cloud Support Associate", description: "", jobType: "FULL_TIME", eligibility: {} },
+  });
+
+  // 4. Another company's open drive: verified.student sees only that it exists
+  const embedded = await db.drive.create({
+    data: {
+      companyId: lakeside.id, createdById: tpoId, title: "Embedded Engineer", roleTitle: "Embedded Engineer", jobType: "FULL_TIME", ctcLpa: 8, location: "Noida",
+      description: "Firmware for smart meters: C, RTOS and board bring-up.", status: "PUBLISHED", approvedById: tpoId, approvedAt: new Date(), optInDeadline: day(3, 18),
+      eligibility: { branches: ["ECE", "EE"], batches: [2027], minCgpa: 6.5 },
+      rounds: { create: [{ sequence: 1, type: "TECHNICAL", title: "Technical round 1", mode: "OFFLINE", startsAt: day(5, 10), venue: "ECE block" }] },
+    },
+  });
+  await db.participation.create({ data: { driveId: embedded.id, studentId: quiet["Rohit Jain"]!, invitedById: tpoId } });
+
+  // 5. Interview-day demo: one interview round, four students already joined. HR starts it, adds panels, makes the lines.
+  const support = await db.drive.create({
+    data: {
+      companyId: northwind.id, createdById: hrId, title: "Support Engineer", roleTitle: "Support Engineer", jobType: "FULL_TIME", ctcLpa: 6, location: "Jaipur", bondMonths: 0,
+      description: "Help store teams fix billing and stock issues: read logs, write SQL, talk to customers and hand bugs to the developers.",
+      status: "PUBLISHED", approvedById: tpoId, approvedAt: new Date(), optInDeadline: day(2, 18),
+      eligibility: { batches: [2027], minCgpa: 7 },
+      rounds: { create: [{ sequence: 1, type: "INTERVIEW", title: "Interview round 1", mode: "OFFLINE", startsAt: day(3, 10), venue: "Placement cell" }] },
+    },
+  });
+  const joined = new Date();
+  for (const studentId of [verified.id, quiet["Isha Verma"]!, quiet["Karan Singh"]!, quiet["Rohit Jain"]!]) {
+    await db.participation.create({ data: { driveId: support.id, studentId, status: "OPTED_IN", invitedById: hrId, respondedAt: joined, consentAt: joined } });
+  }
+
+  // 6. Offers demo: final results already out; Aman and Isha selected, Karan not. HR sends offer letters.
+  const analyst = await db.drive.create({
+    data: {
+      companyId: northwind.id, createdById: hrId, title: "Billing Analyst", roleTitle: "Billing Analyst", jobType: "FULL_TIME", ctcLpa: 7.5, location: "Jaipur", bondMonths: 0,
+      description: "Check invoices and payment runs for retail customers, find mistakes in the data and fix them with the finance team.",
+      status: "RESULTS_DECLARED", approvedById: tpoId, approvedAt: day(-12), optInDeadline: day(-8, 18),
+      eligibility: { batches: [2027], minCgpa: 7 },
+      rounds: { create: [{ sequence: 1, type: "HR", title: "HR round", mode: "OFFLINE", startsAt: day(-3, 10), venue: "Placement cell", status: "RESULTS_PUBLISHED", resultsPublishedAt: day(-2) }] },
+    },
+    include: { rounds: true },
+  });
+  const hrRound = analyst.rounds[0]!;
+  for (const [studentId, result] of [[verified.id, "SELECTED"], [quiet["Isha Verma"]!, "SELECTED"], [quiet["Karan Singh"]!, "REJECTED"]] as const) {
+    const p = await db.participation.create({
+      data: { driveId: analyst.id, studentId, status: result === "SELECTED" ? "SELECTED" : "ELIMINATED", eliminatedAtRoundId: result === "SELECTED" ? null : hrRound.id, invitedById: hrId, invitedAt: day(-12), respondedAt: day(-10), consentAt: day(-10) },
+    });
+    await db.roundResult.create({ data: { roundId: hrRound.id, participationId: p.id, result, setById: hrId } });
+  }
+}
+
 try {
   await storage.ensureReady();
   await clearOld();
-  await account(`tpo${DOMAIN}`, "Demo TPO", [{ role: "TPO" }]);
+  const tpo = await account(`tpo${DOMAIN}`, "Demo TPO", [{ role: "TPO" }]);
+  const hr = await account(`hr${DOMAIN}`, "Demo HR", [{ role: "COMPANY_HR" }]);
+  const interviewer = await account(`interviewer${DOMAIN}`, "Demo Interviewer", [{ role: "INTERVIEWER" }]);
   await account(`staff${DOMAIN}`, "Demo Staff", [{ role: "STAFF", capabilities: ["verify.first", "verify.final", "update_request.decide"] }], true);
   const vol = await account(`volunteer${DOMAIN}`, "Demo Volunteer", [{ role: "VOLUNTEER", capabilities: ["verify.first"] }, { role: "STUDENT" }], false);
   await db.studentProfile.create({ data: { userId: vol.id, rollNo: "22UECE9001", name: "Demo Volunteer", branch: "ECE", batch: 2026 } });
@@ -128,8 +275,14 @@ try {
   await studentWithDocs(`pending.student${DOMAIN}`, "Rahul Meena", "24UCSE9102", "CSE", 2027, "pending");
   await studentWithDocs(`pending.two${DOMAIN}`, "Priya Joshi", "23UCSE9103", "CSE", 2026, "pending");
   await studentWithDocs(`verified.student${DOMAIN}`, "Aman Gupta", "24UIT9104", "IT", 2027, "verified");
+  const quiet = await quietStudents();
+  const aman = await db.user.findUniqueOrThrow({ where: { email: `verified.student${DOMAIN}` } });
+  await demoDrives(tpo.id, hr.id, aman.id, quiet);
+  const northwind = await db.company.findUniqueOrThrow({ where: { domain: "northwind.test" } });
+  await db.companyMember.create({ data: { companyId: northwind.id, userId: interviewer.id, role: "INTERVIEWER" } });
   console.log(`✔ Demo accounts ready (password for all: see DEMO_PASSWORD in src/scripts/seed-demo.ts)`);
-  console.log("  tpo, staff, volunteer, new.student, pending.student, pending.two, verified.student  @cyrus.test");
+  console.log("  tpo, staff, volunteer, hr, interviewer, new.student, pending.student, pending.two, verified.student  @cyrus.test");
+  console.log("  Drives: Northwind Systems (Software Engineer, Support Engineer for interview day, Billing Analyst for offers, one waiting for approval, a draft) and Lakeside Labs");
 } finally {
   await db.$disconnect();
 }

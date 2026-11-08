@@ -2,7 +2,7 @@ import multer from "multer";
 import { z } from "zod";
 import { defineRoute, type RouteDef } from "../../http/define-route.ts";
 import { ApiError } from "../../http/errors.ts";
-import { SELF_UPLOAD_KINDS, type FilesService } from "./service.ts";
+import { SELF_UPLOAD_KINDS, COMPANY_UPLOAD_KINDS, type FilesService } from "./service.ts";
 
 const FileBody = z.object({
   id: z.string(),
@@ -33,10 +33,13 @@ export function filesRoutes(service: FilesService, maxMb: number): RouteDef[] {
             next(err);
           }),
       ],
-      request: { query: z.object({ kind: z.enum(SELF_UPLOAD_KINDS) }) },
+      request: { query: z.object({ kind: z.enum([...SELF_UPLOAD_KINDS, ...COMPANY_UPLOAD_KINDS]) }) },
       responses: { 201: { description: "Stored", schema: FileBody }, 415: { description: "File type not accepted" } },
       handler: async ({ query, auth, req, res }) => {
         if (!req.file) throw new ApiError(400, "NO_FILE", 'Attach a file in the "file" field.');
+        if ((COMPANY_UPLOAD_KINDS as readonly string[]).includes(query.kind) && !auth.has("TPO") && !auth.has("COMPANY_HR")) {
+          throw new ApiError(403, "FORBIDDEN", "Only company HR and the placement office upload offer letters.");
+        }
         res.status(201);
         return service.upload(auth.userId, query.kind, req.file);
       },

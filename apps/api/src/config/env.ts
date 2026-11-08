@@ -50,6 +50,11 @@ const EnvSchema = z.object({
     .enum(["true", "false"])
     .default("true")
     .transform((v) => v === "true"),
+  /**
+   * "off" turns off the per-route limits (login, signup, codes) so automated end-to-end tests can run
+   * many sign-ins in a row. Development only: ignored in production.
+   */
+  ROUTE_LIMITS: z.enum(["on", "off"]).default("on"),
   /** Largest upload accepted, in megabytes. */
   UPLOAD_MAX_MB: z.coerce.number().int().min(1).max(50).default(10),
 });

@@ -20,6 +20,8 @@ const ALLOWED: Record<FileKind, string[]> = {
 const EXT: Record<string, string> = { "application/pdf": "pdf", "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "text/csv": "csv" };
 /** Kinds a person may upload for themselves through POST /files. */
 export const SELF_UPLOAD_KINDS = ["MARKSHEET", "RESUME", "PHOTO"] as const;
+/** Kinds only company HR and the TPO upload. */
+export const COMPANY_UPLOAD_KINDS = ["OFFER_LETTER"] as const;
 
 const LINK_SECONDS = 120;
 
@@ -73,6 +75,18 @@ export function createFilesService({ db, storage, enqueue }: FilesDeps) {
           });
           allowed = !!task;
         }
+      }
+      // Company HR and interviewers: the resume of a student who joined (gave consent to) one of their company's drives.
+      if (!allowed && file.kind === "RESUME" && file.ownerId && (auth.has("COMPANY_HR") || auth.has("INTERVIEWER"))) {
+        const shared = await db.participation.findFirst({
+          where: {
+            consentAt: { not: null },
+            student: { userId: file.ownerId, resumeFileId: file.id },
+            drive: { company: { members: { some: { userId: auth.userId, active: true } } } },
+          },
+          select: { id: true },
+        });
+        allowed = !!shared;
       }
       if (!allowed) throw new ApiError(403, "FORBIDDEN", "You can't open this file.");
       if (file.scanStatus === "INFECTED") throw new ApiError(423, "FILE_BLOCKED", "This file failed the virus check and can't be opened.");

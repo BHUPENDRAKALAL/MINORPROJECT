@@ -29,7 +29,11 @@ export interface AuthContext {
  *  - { capabilities } signed in with a grant that has at least one of these capabilities
  * Ownership (e.g. "only this company's drives") is checked in the service, not here.
  */
-export type Access = "public" | "authenticated" | { roles?: Role[]; capabilities?: Capability[] };
+export type Access =
+  | "public"
+  | "authenticated"
+  /** `match: "any"`: one of the roles OR one of the capabilities is enough (default: both must hold). */
+  | { roles?: Role[]; capabilities?: Capability[]; match?: "all" | "any" };
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -85,5 +89,9 @@ export async function loadAuth(req: Request, db: Db, appSecret: string): Promise
 export function checkAccess(auth: AuthContext, access: Exclude<Access, "public" | "authenticated">): void {
   const roleOk = !access.roles?.length || access.roles.some((r) => auth.has(r));
   const capOk = !access.capabilities?.length || access.capabilities.some((c) => auth.can(c));
-  if (!roleOk || !capOk) throw new ApiError(403, "FORBIDDEN", "You don't have permission to do this.");
+  const allowed =
+    access.match === "any"
+      ? (!!access.roles?.length && access.roles.some((r) => auth.has(r))) || (!!access.capabilities?.length && access.capabilities.some((c) => auth.can(c)))
+      : roleOk && capOk;
+  if (!allowed) throw new ApiError(403, "FORBIDDEN", "You don't have permission to do this.");
 }
