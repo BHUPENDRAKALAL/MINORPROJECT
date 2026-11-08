@@ -3,7 +3,7 @@ import { BrowserRouter, Link, Navigate, Outlet, Route, Routes, useLocation } fro
 import type { Role } from "@cyrus/shared";
 import { AuthProvider } from "./app/auth";
 import { useAuth } from "./app/useAuth";
-import { AREAS, homeFor, STUDENT_AREA } from "./app/nav";
+import { AREAS, homeFor, OFFICE_AREA, STUDENT_AREA, type NavArea } from "./app/nav";
 import Shell from "./app/Shell";
 import { EmptyState, ShapeDefs, Sprite } from "./components/ui";
 import { APP_NAME } from "./lib/brand";
@@ -17,6 +17,9 @@ import VerifyEmail from "./pages/auth/VerifyEmail";
 import ChangePassword from "./pages/app/ChangePassword";
 import Placeholder from "./pages/app/Placeholder";
 import StudentHome from "./pages/app/StudentHome";
+import StudentProfile from "./pages/app/StudentProfile";
+import ReviewQueue from "./pages/app/ReviewQueue";
+import Team from "./pages/app/Team";
 import SystemStatus from "./pages/app/SystemStatus";
 
 function Loading() {
@@ -118,6 +121,15 @@ function StatusRoute() {
   );
 }
 
+/** Built pages; everything else shows its designed empty state until it is built. */
+function pageFor(area: NavArea, key: string) {
+  if (area === STUDENT_AREA && key === "home") return <StudentHome />;
+  if (area === STUDENT_AREA && key === "profile") return <StudentProfile />;
+  if (area === OFFICE_AREA && key === "review") return <ReviewQueue />;
+  if (area === OFFICE_AREA && key === "team") return <Team />;
+  return null;
+}
+
 export function AppRoutes() {
   return (
     <Routes>
@@ -142,7 +154,7 @@ export function AppRoutes() {
               path={item.to}
               element={
                 <RequireRole roles={item.only ?? area.roles}>
-                  {area === STUDENT_AREA && item.key === "home" ? <StudentHome /> : <Placeholder item={item} />}
+                  {pageFor(area, item.key) ?? <Placeholder item={item} />}
                 </RequireRole>
               }
             />

@@ -28,8 +28,30 @@ const EnvSchema = z.object({
     .transform((v) => v === "true"),
   /** Where the web app runs; used to build links in emails (invites). */
   WEB_APP_URL: z.string().url().default("http://localhost:5173"),
-  MAIL_MODE: z.enum(["console"]).default("console"),
+  /** console = print in the worker log; smtp = send through SMTP (Mailpit in dev, Brevo/Gmail for real). */
+  MAIL_MODE: z.enum(["console", "smtp"]).default("console"),
   MAIL_FROM: z.string().default("Cyrus <no-reply@cyrus.local>"),
+  SMTP_HOST: z.string().default("localhost"),
+  SMTP_PORT: z.coerce.number().int().positive().default(1025),
+  SMTP_SECURE: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+
+  /** S3-compatible file storage (SeaweedFS in dev; R2, Supabase Storage or S3 in production). */
+  S3_ENDPOINT: z.string().url().default("http://localhost:8333"),
+  S3_REGION: z.string().default("us-east-1"),
+  S3_BUCKET: z.string().default("cyrus-files"),
+  S3_ACCESS_KEY: z.string().default("cyrus-dev-key"),
+  S3_SECRET_KEY: z.string().default("cyrus-dev-secret"),
+  S3_FORCE_PATH_STYLE: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true"),
+  /** Largest upload accepted, in megabytes. */
+  UPLOAD_MAX_MB: z.coerce.number().int().min(1).max(50).default(10),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

@@ -34,6 +34,8 @@ export interface RouteDef<P extends ZodType = ZodType, Q extends ZodType = ZodTy
   tags: string[];
   /** Extra per-route limit on top of the global one (login, OTP, signup…). */
   limit?: RouteLimit;
+  /** Extra middleware run after the access check, before validation (e.g. multipart upload parsing). */
+  before?: RequestHandler[];
   request?: { params?: P; query?: Q; body?: B };
   responses: Record<number, { description: string; schema?: ZodType }>;
   handler: (input: {
@@ -101,18 +103,22 @@ export function mountRoutes(router: Router, registry: OpenAPIRegistry, prefix: s
       );
     }
 
-    router[def.method](def.path, ...middlewares, async (req, res) => {
+    // Who is calling is checked before any `before` middleware (e.g. file upload parsing),
+    // so an anonymous caller can't make the server read a large upload.
+    const authenticate: RequestHandler = async (req, res, next) => {
       res.locals["routeClass"] = def.routeClass;
       res.setHeader("x-route-class", def.routeClass);
-
-      let auth: AuthContext = NO_AUTH;
       if (def.access !== "public") {
         if (!ctx.db) throw new ApiError(503, "UNAVAILABLE", "Sign-in is not available right now.");
-        auth = await loadAuth(req, ctx.db, ctx.appSecret);
-        req.auth = auth;
-        if (def.access !== "authenticated") checkAccess(auth, def.access);
+        const loaded = await loadAuth(req, ctx.db, ctx.appSecret);
+        req.auth = loaded;
+        if (def.access !== "authenticated") checkAccess(loaded, def.access);
       }
+      next();
+    };
 
+    router[def.method](def.path, ...middlewares, authenticate, ...(def.before ?? []), async (req, res) => {
+      const auth: AuthContext = req.auth ?? NO_AUTH;
       const params = parse(def.request?.params, req.params, "params");
       const query = parse(def.request?.query, req.query, "query");
       const body = parse(def.request?.body, req.body, "body");

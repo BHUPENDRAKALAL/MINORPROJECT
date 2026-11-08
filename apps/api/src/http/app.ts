@@ -18,6 +18,15 @@ import { routeTiming } from "./timing.ts";
 import { healthRoutes } from "../modules/health/routes.ts";
 import { createAuthService } from "../modules/auth/service.ts";
 import { authRoutes } from "../modules/auth/routes.ts";
+import type { Storage } from "../lib/storage.ts";
+import type { Enqueue } from "../lib/enqueue.ts";
+import { createFilesService } from "../modules/files/service.ts";
+import { filesRoutes } from "../modules/files/routes.ts";
+import { createStudentsService } from "../modules/students/service.ts";
+import { studentRoutes } from "../modules/students/routes.ts";
+import { createReviewService } from "../modules/review/service.ts";
+import { reviewRoutes } from "../modules/review/routes.ts";
+import { teamRoutes } from "../modules/team/routes.ts";
 
 export interface AppDeps {
   env: Env;
@@ -26,6 +35,12 @@ export interface AppDeps {
   redis?: Redis;
   /** How emails leave the API (queue in production, memory in tests). Needed for auth routes. */
   mailer?: Mailer;
+  /** Private file storage (S3-compatible; memory in tests). Needed for uploads and reviews. */
+  storage?: Storage;
+  /** Hands background jobs to the workers (queues in production, a recorder in tests). */
+  enqueue?: Enqueue;
+  /** Tests can fix the "random" spot-check roll. */
+  random?: () => number;
 }
 
 const PREFIX = "/api/v1";
@@ -67,6 +82,14 @@ export function buildApp(deps: AppDeps): Express {
   if (deps.db && deps.mailer) {
     const service = createAuthService({ db: deps.db, mailer: deps.mailer, env });
     mountRoutes(v1, registry, PREFIX, authRoutes({ service, cookieSecure: env.COOKIE_SECURE }), ctx);
+    mountRoutes(v1, registry, PREFIX, teamRoutes(deps.db, service), ctx);
+    if (deps.storage && deps.enqueue) {
+      const files = createFilesService({ db: deps.db, storage: deps.storage, enqueue: deps.enqueue });
+      mountRoutes(v1, registry, PREFIX, filesRoutes(files, env.UPLOAD_MAX_MB), ctx);
+      mountRoutes(v1, registry, PREFIX, studentRoutes(createStudentsService({ db: deps.db })), ctx);
+      const review = createReviewService({ db: deps.db, mailer: deps.mailer, storage: deps.storage, env, random: deps.random });
+      mountRoutes(v1, registry, PREFIX, reviewRoutes(review), ctx);
+    }
   }
   app.use(PREFIX, v1);
 

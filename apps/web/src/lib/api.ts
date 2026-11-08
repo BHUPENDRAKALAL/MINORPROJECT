@@ -177,6 +177,8 @@ const SESSION_CODES = new Set(["TOKEN_INVALID", "SESSION_ENDED"]);
 export interface RequestOptions {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
+  /** Multipart upload instead of a JSON body. */
+  form?: FormData;
   /** Send the access token and refresh on 401. Defaults to true. Public auth routes pass false. */
   auth?: boolean;
   /** Return the parsed body for these non-2xx statuses instead of throwing (used by /ready). */
@@ -186,14 +188,14 @@ export interface RequestOptions {
 
 async function send(path: string, opts: RequestOptions): Promise<Response> {
   const headers: Record<string, string> = { Accept: "application/json" };
-  if (opts.body !== undefined) headers["Content-Type"] = "application/json";
+  if (opts.body !== undefined && !opts.form) headers["Content-Type"] = "application/json";
   if (opts.auth !== false && session.accessToken) headers.Authorization = `Bearer ${session.accessToken}`;
   try {
     return await fetch(`${BASE}${PREFIX}${path}`, {
       method: opts.method ?? "GET",
       credentials: "include",
       headers,
-      body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+      body: opts.form ?? (opts.body === undefined ? undefined : JSON.stringify(opts.body)),
       signal: opts.signal,
     });
   } catch (e) {
@@ -280,4 +282,172 @@ export const meApi = {
   get: () => api<Me>("/me"),
   changePassword: (currentPassword: string, newPassword: string) =>
     api<void>("/me/password", { method: "PATCH", body: { currentPassword, newPassword } }),
+};
+
+// ---------------------------------------------------------------------------
+// Files, student profile, review queue, team
+// ---------------------------------------------------------------------------
+
+export type UploadKind = "MARKSHEET" | "RESUME" | "PHOTO";
+export interface UploadedFile {
+  id: string;
+  kind: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  scanStatus: "PENDING" | "CLEAN" | "INFECTED" | "FAILED";
+}
+
+export const filesApi = {
+  upload: (kind: UploadKind, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return api<UploadedFile>(`/files?kind=${kind}`, { method: "POST", form });
+  },
+  link: (id: string) => api<{ url: string; expiresInSeconds: number }>(`/files/${id}/link`),
+};
+
+export interface AcademicRecord {
+  id: string;
+  cgpa: number;
+  activeBacklogs: number;
+  totalBacklogs: number;
+  tenthPercent: number | null;
+  twelfthPercent: number | null;
+  diplomaPercent: number | null;
+  semester: number | null;
+  status: string;
+}
+export type AcademicInput = Pick<AcademicRecord, "cgpa" | "activeBacklogs" | "totalBacklogs" | "tenthPercent" | "twelfthPercent" | "diplomaPercent" | "semester">;
+
+export interface StudentDocument {
+  id: string;
+  type: "MARKSHEET_10" | "MARKSHEET_12" | "DIPLOMA" | "SEMESTER_MARKSHEET" | "OTHER";
+  semester: number | null;
+  status: string;
+  flagged: boolean;
+  file: { id: string; originalName: string; mimeType: string; sizeBytes: number; scanStatus: string };
+}
+
+export interface StudentProfileView {
+  profile: {
+    id: string;
+    rollNo: string;
+    name: string;
+    branch: string;
+    batch: number;
+    degree: string | null;
+    gender: string | null;
+    status: StudentStatus;
+    rejectionReason: string | null;
+    skills: string[];
+    resumeFileId: string | null;
+    cgpa: number | null;
+    activeBacklogs: number | null;
+    totalBacklogs: number | null;
+    tenthPercent: number | null;
+    twelfthPercent: number | null;
+    diplomaPercent: number | null;
+    verifiedAt: string | null;
+    email: string;
+    phone: string | null;
+  };
+  draft: AcademicRecord | null;
+  verified: AcademicRecord | null;
+  documents: StudentDocument[];
+  review: { status: string; type: string; submittedAt: string } | null;
+  pendingUpdate: boolean;
+  rejection: { reasonCode: string | null; note: string | null; at: string } | null;
+  missing: string[];
+  canEdit: boolean;
+  canWithdraw: boolean;
+}
+
+export const studentApi = {
+  get: () => api<StudentProfileView>("/students/me"),
+  update: (body: Partial<{ name: string; phone: string | null; gender: string | null; degree: string | null; skills: string[]; resumeFileId: string | null }>) =>
+    api<StudentProfileView>("/students/me", { method: "PATCH", body }),
+  saveAcademics: (body: AcademicInput) => api<StudentProfileView>("/students/me/academics", { method: "PUT", body }),
+  addDocument: (body: { fileId: string; type: StudentDocument["type"]; semester?: number | null }) =>
+    api<StudentProfileView>("/students/me/documents", { method: "POST", body }),
+  removeDocument: (id: string) => api<StudentProfileView>(`/students/me/documents/${id}`, { method: "DELETE" }),
+  submit: () => api<StudentProfileView>("/students/me/submit", { method: "POST" }),
+  withdraw: () => api<StudentProfileView>("/students/me/withdraw", { method: "POST" }),
+  requestUpdate: (body: AcademicInput & { note?: string }) => api<StudentProfileView>("/students/me/update-requests", { method: "POST", body }),
+};
+
+export interface ReviewSummary {
+  reviewer: "TPO" | "STAFF" | "VOLUNTEER";
+  pledgeRequired: boolean;
+  waiting: Record<string, number>;
+  waitingTotal: number;
+  doneToday: number;
+  current: { id: string; type: string; claimedUntil: string } | null;
+}
+
+export interface ReviewDoc {
+  id: string;
+  type: StudentDocument["type"];
+  semester: number | null;
+  status: string;
+  flags: { duplicateOf?: string[] } | null;
+  file: { id: string; originalName: string; mimeType: string; scanStatus: string; url: string | null };
+}
+
+export interface ReviewTaskView {
+  id: string;
+  type: string;
+  risk: "LOW" | "MEDIUM" | "HIGH";
+  status: string;
+  createdAt: string;
+  claimedUntil: string | null;
+  escalationNote: string | null;
+  student?: { id: string; name: string; rollNo: string; branch: string; batch: number; status: string };
+  academics?: AcademicRecord | null;
+  previousVerified?: AcademicRecord | null;
+  documents?: ReviewDoc[];
+  firstDecision?: { decision: string; reasonCode: string | null; note: string | null };
+  subject?: ReviewTaskView;
+}
+
+export const workApi = {
+  summary: () => api<ReviewSummary>("/work/summary"),
+  pledge: () => api<{ pledgeAcceptedAt: string }>("/work/onboarding/pledge", { method: "POST" }),
+  next: async () => {
+    const r = await api<ReviewTaskView | { task: null }>("/work/next", { method: "POST" });
+    return "task" in r && r.task === null ? null : (r as ReviewTaskView);
+  },
+  get: (id: string) => api<ReviewTaskView>(`/work/tasks/${id}`),
+  decide: (id: string, body: { decision: "APPROVE" | "REJECT"; reasonCode?: string | null; note?: string | null }) =>
+    api<{ outcome: "closed" | "sent_for_second_check" | "escalated" }>(`/work/tasks/${id}/decision`, { method: "POST", body }),
+  release: (id: string) => api<{ released: boolean }>(`/work/tasks/${id}/release`, { method: "POST" }),
+  extend: (id: string) => api<{ claimedUntil: string }>(`/work/tasks/${id}/extend`, { method: "POST" }),
+  escalate: (id: string, note: string) => api<{ escalated: boolean }>(`/work/tasks/${id}/escalate`, { method: "POST", body: { note } }),
+};
+
+export interface TeamMember {
+  userId: string;
+  email: string;
+  name: string | null;
+  role: "STAFF" | "VOLUNTEER";
+  capabilities: string[];
+  scope: { branches?: string[]; batches?: number[] } | null;
+  status: string;
+  pledgeAccepted: boolean;
+  tasksDecided: number;
+}
+export interface TeamInvite {
+  id: string;
+  email: string;
+  role: string;
+  capabilities: string[];
+  scope: { branches?: string[]; batches?: number[] } | null;
+  expiresAt: string;
+}
+
+export const teamApi = {
+  list: () => api<{ members: TeamMember[]; invites: TeamInvite[] }>("/admin/team"),
+  invite: (body: { email: string; role: "STAFF" | "VOLUNTEER"; capabilities: string[]; scope?: { branches?: string[]; batches?: number[] } }) =>
+    api<{ inviteId: string }>("/admin/team", { method: "POST", body }),
+  remove: (userId: string, role: "STAFF" | "VOLUNTEER") => api<void>(`/admin/team/${userId}/${role}`, { method: "DELETE" }),
 };

@@ -20,7 +20,7 @@ apps/
     src-tauri/  Tauri v2 shell: the same web app as a desktop / Android app
 packages/
   shared/       Constants and types used by both: roles, queues, events, route classes
-docker-compose.yml   PostgreSQL 17 + Redis 7 for local development
+docker-compose.yml   PostgreSQL 17, Redis 7, SeaweedFS (S3 file storage) and Mailpit (test inbox)
 ```
 
 ## First-time setup
@@ -51,7 +51,13 @@ Create the first TPO account (prints a one-time password):
 pnpm --filter @cyrus/api create-tpo --email tpo@example.com --name "Placement Officer"
 ```
 
-> In development, emails (signup codes, invites) are printed in the **worker** terminal instead of being sent.
+Demo accounts for trying every role (TPO, staff, volunteer, students in each state). Development only; the emails and the shared password are listed at the top of `apps/api/src/scripts/seed-demo.ts`:
+
+```bash
+pnpm --filter @cyrus/api seed:demo
+```
+
+> In development every email (signup codes, invites, verification results) lands in **Mailpit**: open http://localhost:8025. Uploaded files are stored in SeaweedFS (S3 API on port 8333).
 
 > Redis runs on port **6380** (not the usual 6379) because some machines already have an old Redis on 6379.
 

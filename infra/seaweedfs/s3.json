@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "cyrus-dev",
+      "credentials": [{ "accessKey": "cyrus-dev-key", "secretKey": "cyrus-dev-secret" }],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

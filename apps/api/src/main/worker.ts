@@ -3,6 +3,7 @@ import { QUEUES, type QueueKey } from "@cyrus/shared";
 import { loadEnv } from "../config/env.ts";
 import { createDb } from "../lib/db.ts";
 import { createRedis } from "../lib/redis.ts";
+import { s3Storage } from "../lib/storage.ts";
 import { resolveProcessor, type JobPayload } from "../workers/processors.ts";
 import { onShutdown } from "./shutdown.ts";
 
@@ -16,6 +17,7 @@ import { onShutdown } from "./shutdown.ts";
 const env = loadEnv();
 const db = createDb(env.DATABASE_URL);
 const connection = createRedis(env.REDIS_URL, "queue");
+const storage = s3Storage(env);
 
 const allKeys = Object.keys(QUEUES) as QueueKey[];
 const wanted = (process.env["WORKER_QUEUES"] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -30,7 +32,7 @@ const workers = keys.map((key) => {
       if (job.data.jobId) {
         await db.job.update({ where: { id: job.data.jobId }, data: { status: "RUNNING", startedAt: new Date() } });
       }
-      const result = await handler(job, { db, env });
+      const result = await handler(job, { db, env, storage });
       if (job.data.jobId) {
         await db.job.update({
           where: { id: job.data.jobId },

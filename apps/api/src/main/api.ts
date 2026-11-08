@@ -5,6 +5,8 @@ import { createLogger } from "../lib/logger.ts";
 import { queueMailer } from "../lib/mail.ts";
 import { createQueues, closeQueues } from "../lib/queues.ts";
 import { createRedis } from "../lib/redis.ts";
+import { s3Storage } from "../lib/storage.ts";
+import { queueEnqueue } from "../lib/enqueue.ts";
 import { onShutdown } from "./shutdown.ts";
 
 /** Process 1 of 4: the HTTP API (Light, Hot and Light + background routes; Heavy routes only enqueue). */
@@ -15,7 +17,9 @@ const redis = createRedis(env.REDIS_URL);
 // Producers need a connection that waits for Redis instead of failing fast.
 const queueRedis = createRedis(env.REDIS_URL, "queue");
 const queues = createQueues(queueRedis);
-const app = buildApp({ env, log, db, redis, mailer: queueMailer(queues) });
+const storage = s3Storage(env);
+await storage.ensureReady().catch((e: Error) => log.warn({ err: e }, "file storage not reachable yet; uploads will fail until it is"));
+const app = buildApp({ env, log, db, redis, mailer: queueMailer(queues), storage, enqueue: queueEnqueue(queues) });
 
 const server = app.listen(env.API_PORT, () => log.info(`API listening on :${env.API_PORT} (docs: /api/docs)`));
 

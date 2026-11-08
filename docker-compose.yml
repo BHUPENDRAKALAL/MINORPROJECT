@@ -1,4 +1,5 @@
-# Local development infrastructure: PostgreSQL + Redis.
+# Local development infrastructure: PostgreSQL, Redis, SeaweedFS (S3-compatible file storage)
+# and Mailpit (a fake inbox that catches every email the app sends).
 # Start with `pnpm infra:up`. Data is kept in named volumes (outside OneDrive).
 name: cyrus
 
@@ -35,6 +36,26 @@ services:
       timeout: 3s
       retries: 10
 
+  # File storage that speaks the S3 API. In production the same code talks to R2, Supabase Storage or S3.
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.52
+    restart: unless-stopped
+    command: ["server", "-dir=/data", "-s3", "-s3.port=8333", "-s3.config=/etc/seaweedfs/s3.json", "-ip.bind=0.0.0.0"]
+    ports:
+      - "8333:8333"   # S3 API
+    volumes:
+      - seaweeddata:/data
+      - ./infra/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+
+  # Every email the app sends lands here instead of a real inbox. Open http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:v1.33.0
+    restart: unless-stopped
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # web inbox
+
 volumes:
   pgdata:
   redisdata:
+  seaweeddata:

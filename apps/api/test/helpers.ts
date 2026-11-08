@@ -3,6 +3,8 @@ import { createDb, type Db } from "../src/lib/db.ts";
 import { createLogger } from "../src/lib/logger.ts";
 import { memoryMailer } from "../src/lib/mail.ts";
 import { buildApp } from "../src/http/app.ts";
+import { memoryStorage } from "../src/lib/storage.ts";
+import { recordingEnqueue } from "../src/lib/enqueue.ts";
 
 export const TEST_DB_URL = process.env["TEST_DATABASE_URL"];
 export const hasTestDb = !!TEST_DB_URL;
@@ -32,13 +34,18 @@ export async function resetDb(db: Db): Promise<void> {
   await db.$executeRawUnsafe(`TRUNCATE ${list} RESTART IDENTITY CASCADE`);
 }
 
-/** A fresh app per test: fresh rate-limit counters and an inbox to read codes from. */
-export function testApp() {
+/**
+ * A fresh app per test: fresh rate-limit counters, an inbox to read codes from, in-memory file storage,
+ * a recorder for background jobs, and a fixed "random" roll for spot checks (default: no spot check).
+ */
+export function testApp(opts: { random?: () => number } = {}) {
   const env = testEnv();
   const db = testDb();
   const mailer = memoryMailer();
-  const app = buildApp({ env, log: createLogger(env, "test"), db, mailer });
-  return { app, db, mailer, env };
+  const storage = memoryStorage();
+  const enqueue = recordingEnqueue();
+  const app = buildApp({ env, log: createLogger(env, "test"), db, mailer, storage, enqueue, random: opts.random ?? (() => 0.99) });
+  return { app, db, mailer, env, storage, enqueue };
 }
 
 /** Pulls the 6-digit code out of the last email sent to `to`. */
