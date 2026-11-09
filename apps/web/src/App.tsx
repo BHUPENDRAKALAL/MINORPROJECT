@@ -30,6 +30,7 @@ import RoundPage from "./pages/app/drives/RoundPage";
 import CheckIn from "./pages/app/drives/CheckIn";
 import PanelScreen from "./pages/app/drives/PanelScreen";
 import { CompanyTeam, MyPanels } from "./pages/app/drives/Interviews";
+import Notifications from "./pages/app/Notifications";
 
 function Loading() {
   return (
@@ -148,6 +149,7 @@ function pageFor(area: NavArea, key: string) {
   if ((area === OFFICE_AREA || area === COMPANY_AREA) && key === "drives") return <DriveList />;
   if (area === COMPANY_AREA && key === "team") return <CompanyTeam />;
   if (area === INTERVIEWER_AREA && key === "panel") return <MyPanels />;
+  if (key === "notifications") return <Notifications />;
   return null;
 }
 

@@ -4,7 +4,7 @@ import express from "express";
 import { OpenAPIRegistry } from "@asteasolutions/zod-to-openapi";
 import { loadEnv } from "../config/env.ts";
 import { createLogger } from "../lib/logger.ts";
-import { buildApp } from "./app.ts";
+import { buildApp, globalLimitKey } from "./app.ts";
 import { mountRoutes, type RouteDef } from "./define-route.ts";
 
 const env = loadEnv({
@@ -56,5 +56,21 @@ describe("defineRoute", () => {
     expect(() =>
       mountRoutes(express.Router(), new OpenAPIRegistry(), "/api/v1", [bad as unknown as RouteDef], { appSecret: env.APP_SECRET }),
     ).toThrow(/access/);
+  });
+});
+
+describe("global rate limit buckets", () => {
+  const req = (headers: Record<string, string>, ip = "10.0.0.1") => ({ headers, ip }) as unknown as express.Request;
+  it("counts signed-in requests per session, so students on one campus IP don't share a limit", () => {
+    const a = globalLimitKey(req({ authorization: "Bearer aaaaaaaaaaaaaaaaaaaaaaaa.one" }));
+    const b = globalLimitKey(req({ authorization: "Bearer bbbbbbbbbbbbbbbbbbbbbbbb.two" }));
+    expect(a).not.toBe(b);
+    expect(a).toMatch(/^s:/);
+    expect(globalLimitKey(req({ authorization: "Bearer aaaaaaaaaaaaaaaaaaaaaaaa.one" }, "10.9.9.9"))).toBe(a);
+  });
+  it("counts anonymous requests per IP", () => {
+    expect(globalLimitKey(req({}))).toBe(globalLimitKey(req({ authorization: "Basic x" })));
+    expect(globalLimitKey(req({}))).toMatch(/^ip:/);
+    expect(globalLimitKey(req({}, "10.0.0.2"))).not.toBe(globalLimitKey(req({})));
   });
 });

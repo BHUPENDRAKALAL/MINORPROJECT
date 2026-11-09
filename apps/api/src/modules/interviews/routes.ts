@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_KEY_POINTS } from "@cyrus/shared";
 import type { Db } from "../../lib/db.ts";
 import { defineRoute, type RouteDef } from "../../http/define-route.ts";
 import { ApiError } from "../../http/errors.ts";
@@ -161,11 +162,19 @@ export function interviewRoutes(service: InterviewsService, auth: AuthService, d
       path: "/queue/:id/end",
       routeClass: "HOT",
       access: PANEL_PEOPLE,
-      summary: "End the interview with private notes, a recommendation and an optional remark for the student (the TPO checks it first)",
+      summary: "End the interview: ratings per criterion, strengths, concerns, private notes, a recommendation, and an optional remark for the student (the TPO checks it first)",
       tags: ["interviews"],
       request: {
         params: Id,
-        body: z.object({ privateNotes: text(4000), recommendation: z.enum(["SELECT", "REJECT", "HOLD"]).nullable().optional(), feedback: text(1000) }),
+        body: z.object({
+          privateNotes: text(4000),
+          recommendation: z.enum(["SELECT", "REJECT", "HOLD"]).nullable().optional(),
+          feedback: text(1000),
+          /** criterion key → 1..5 (keys from INTERVIEW_CRITERIA for the round's kind) */
+          ratings: z.record(z.string().max(40), z.number().int().min(1, "Ratings are 1 to 5.").max(5, "Ratings are 1 to 5.")).nullable().optional(),
+          strengths: z.array(z.string().trim().max(200)).max(MAX_KEY_POINTS).optional(),
+          concerns: z.array(z.string().trim().max(200)).max(MAX_KEY_POINTS).optional(),
+        }),
       },
       responses: panelOk,
       handler: ({ auth: me, params, body }) => service.endInterview(me, params.id, body),

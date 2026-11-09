@@ -10,7 +10,8 @@ import { useTitle } from "../../../lib/useTitle";
 import { drivePaths, when } from "./format";
 import { QrScreen } from "./QrScreen";
 import { PanelsSetup } from "./Interviews";
-import { interviewsApi, type Recommendation } from "../../../lib/api";
+import { interviewsApi, type PanelOpinion } from "../../../lib/api";
+import { KeyPointsSummary } from "./KeyPoints";
 
 const ROUND_STATUS: Record<RoundView["status"], [string, string]> = {
   SCHEDULED: ["Not started", "waiting"],
@@ -30,7 +31,7 @@ export default function RoundPage() {
   const [round, setRound] = useState<RoundView | null>(null);
   const [draft, setDraft] = useState<Record<string, ResultValue>>({});
   const [msg, setMsg] = useState<string | null>(null);
-  const [recs, setRecs] = useState<Record<string, { panel: string; recommendation: Recommendation | null; privateNotes: string | null; status: string }>>({});
+  const [recs, setRecs] = useState<Record<string, PanelOpinion>>({});
   const load = useApiForm();
   const act = useApiForm();
   useTitle(round ? round.title : "Round");
@@ -306,20 +307,18 @@ export default function RoundPage() {
 const REC_TO_RESULT = { SELECT: "SELECTED", REJECT: "REJECTED", HOLD: "ON_HOLD" } as const;
 const REC_WORD = { SELECT: "Select", REJECT: "Reject", HOLD: "Hold" } as const;
 
-/** The panel's recommendation and private notes for one student. */
-function PanelSays({ rec }: { rec?: { panel: string; recommendation: Recommendation | null; privateNotes: string | null; status: string } }) {
+/** The panel's recommendation, ratings and key points for one student. */
+function PanelSays({ rec }: { rec?: PanelOpinion }) {
   if (!rec) return <span className="faint">Not in a line</span>;
-  const word = rec.recommendation ? REC_WORD[rec.recommendation] : rec.status === "ABSENT" ? "Absent" : rec.status === "DONE" ? "No recommendation" : "Not interviewed yet";
+  if (!rec.recommendation && rec.status !== "DONE") return <span className="faint">{rec.panel}: {rec.status === "ABSENT" ? "Absent" : "Not interviewed yet"}</span>;
   return (
-    <>
-      {rec.panel}: {word}
-      {rec.privateNotes && (
-        <span className="faint cy-notes" title={rec.privateNotes}>
-          {" "}
-          · {rec.privateNotes}
-        </span>
-      )}
-    </>
+    <details className="cy-done-details">
+      <summary>
+        {rec.panel}: {rec.recommendation ? REC_WORD[rec.recommendation] : "No recommendation"}
+        {rec.average != null ? ` · Avg ${rec.average.toFixed(1)}` : ""}
+      </summary>
+      <KeyPointsSummary k={rec} />
+    </details>
   );
 }
 

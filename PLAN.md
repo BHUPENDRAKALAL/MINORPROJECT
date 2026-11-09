@@ -3,6 +3,7 @@
 > **This file is the single source of truth for the project.**
 > If anything conflicts (the synopsis PDF, chats, code, or memory), **this file wins**.
 > Any change to scope, roles, flow or tech goes here first, then into the code.
+> Problems we hit and how we fixed them are logged in [PROBLEMS-AND-FIXES.md](PROBLEMS-AND-FIXES.md).
 
 | | |
 |---|---|
@@ -11,7 +12,7 @@
 | Students | Seya Mali (24UCSE4073), Bhupendra Kalal (24UCSE4008) |
 | Guide / Mentor | Dr. Abhishek Gaur / Dr. Simran Choudhary |
 | Base document | Original synopsis (`kalaaaal.pdf`). This plan extends it with the **Company HR–driven drive flow** |
-| Last updated | 2026-11-07 |
+| Last updated | 2026-11-09 |
 
 ---
 
@@ -119,7 +120,9 @@ Built 2026-11-08 (Phase B3). Works for Technical, Interview and HR rounds.
 4. **Skip:** a called student who isn't there goes to the end of the line and is told. The second skip marks them absent from the line; "Back in line" undoes it if they turn up.
 5. **Students** see their place on the drive page, refreshed every 10 seconds: "You're number 3 in line for Panel A (Room 204), about 30 min". The wait is (people ahead + the one in the room) × the panel's average interview length (15 min until two interviews are done). Live push with Socket.io comes later; polling is enough for one campus.
 6. **Notes vs remarks:** private notes and recommendations are seen only by the company and the TPO. A remark for the student goes to the TPO first (drive page → "Feedback to check"); the TPO sends it as is, rewords it, or doesn't send it. Only then does the student see it under the round.
-7. **Final decision:** the round's results table shows each student's panel recommendation and notes; "Use panel recommendations" fills the results, HR can change any, then publishes as in 3.5. Publishing waits until no interview is still running.
+7. **Structured key points** (added 2026-11-09): besides private notes, the interviewer rates the student 1–5 on the round's criteria and lists strengths and concerns (one per line). Criteria per kind of round: Technical (problem solving, technical knowledge, coding, communication), Interview (technical knowledge, problem solving, communication, confidence), HR (communication, attitude, career goals fit, team and culture fit), GD (communication, ideas, teamwork). Company + TPO only, never shown to students.
+8. **Earlier rounds on the panel screen** (added 2026-11-09): when a student is called, the interviewer sees everything earlier rounds say about them: each round's published result, whether they checked in, and every panel's recommendation, ratings (with the average), strengths, concerns and notes. Results not yet published stay hidden.
+9. **Final decision:** the round's results table shows each student's panel recommendation and notes; "Use panel recommendations" fills the results, HR can change any, then publishes as in 3.5. Publishing waits until no interview is still running.
 
 ### 3.7 Final results, offers & closing
 Built 2026-11-08 (Phase B4).
@@ -285,3 +288,5 @@ Repo: PlaceMint, a public placement-portal project on GitHub (Flask + Vue + SQLi
 | 2026-11-08 | Drives Phase B1/B2 built: round lifecycle (start in order; first round closes joining), QR check-in (rotating every 15 s, scanned with the phone camera, optional location radius, manual marking by the TPO only with a reason), results by hand or CSV from a test platform, publish (out / absent + no-show count / through / selected after the last round), students see their own result per round. Access rule added: a route can allow a role OR a permission (drive-day helpers). Next: B3 interview queue with panels, B4 offers |
 | 2026-11-08 | Drives Phase B3 built: interview panels (HR, interviewers), HR invites interviewers from the company Team page, lines split evenly (only checked-in students if check-in was used), interviewer screen with call next / start / end / skip (absent after two skips, can be put back), students see their place and a wait estimate, private notes vs student remarks (TPO checks remarks before release), panel recommendations shown next to results. Demo: interviewer@cyrus.test and the Support Engineer drive for interview day. Next: B4 offers |
 | 2026-11-08 | Drives Phase B4 built: offer letters (PDF per selected student, visible only to the student, TPO and company HR via 2-minute links; replace or withdraw), student accept/decline with a deadline (expired after it), accepting places the student and writes the placement record, one-offer rule with the dream-offer exception, TPO closes the drive. Company HR and interviewers can open the resume of students who joined their drives. Demo: Billing Analyst drive with final results out. Phase B of drives is complete |
+| 2026-11-09 | Live drive simulation (9 people signed in at once: HR, TPO, 2 interviewers, 4 students) passes end to end; it found one bug (fixed). Added: structured interview key points (1–5 ratings per criterion for the round's kind, strengths, concerns), interviewers see every earlier round's results and panel notes for the student, and a Notifications page for every role with an unread badge in the side panel |
+| 2026-11-09 | Added PROBLEMS-AND-FIXES.md: every bug, setup problem and test failure so far with its cause and fix, plus what's still open. Kept up to date from now on |

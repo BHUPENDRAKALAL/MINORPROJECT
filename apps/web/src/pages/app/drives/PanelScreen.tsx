@@ -5,11 +5,17 @@ import { useApiForm } from "../../../components/useApiForm";
 import { Alert, EmptyState } from "../../../components/ui";
 import { filesApi, interviewsApi, type PanelView, type QueueRow, type Recommendation } from "../../../lib/api";
 import { openLink } from "./format";
+import { EarlierRounds, KeyPointsSummary, RatingInput } from "./KeyPoints";
+import type { Criterion } from "@cyrus/shared";
 import { useTitle } from "../../../lib/useTitle";
 import { drivePaths } from "./format";
 
 const REC_LABEL: Record<Recommendation, string> = { SELECT: "Select", REJECT: "Reject", HOLD: "Hold" };
-const REC_TONE: Record<Recommendation, string> = { SELECT: "done fam-lime", REJECT: "stuck fam-ember", HOLD: "waiting fam-sun" };
+
+const avg = (r: Record<string, number> | null) => {
+  const v = Object.values(r ?? {});
+  return v.length ? Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 10) / 10 : null;
+};
 
 /** Minutes and seconds since a moment, ticking every second. */
 function useElapsed(from: string | null | undefined) {
@@ -72,7 +78,7 @@ export default function PanelScreen() {
           {panel.round.status === "SCHEDULED" ? "This round hasn't started yet. The line appears here once HR starts it." : "This round is over."}
         </EmptyState>
       ) : panel.current ? (
-        <Current row={panel.current} busy={act.busy} doing={doing} />
+        <Current row={panel.current} busy={act.busy} doing={doing} criteria={panel.criteria} />
       ) : (
         <div className="banner fam-azure cy-next">
           <div className="banner-words">
@@ -144,8 +150,14 @@ export default function PanelScreen() {
                         </button>
                       )}
                     </>
-                  ) : d.session?.recommendation ? (
-                    <span className={`stage ${REC_TONE[d.session.recommendation]}`}>{REC_LABEL[d.session.recommendation]}</span>
+                  ) : d.session ? (
+                    <details className="cy-done-details">
+                      <summary>{d.session.recommendation ? REC_LABEL[d.session.recommendation] : "No recommendation"}</summary>
+                      <KeyPointsSummary
+                        k={{ ...d.session, average: avg(d.session.ratings) }}
+                        criteria={panel.criteria}
+                      />
+                    </details>
                   ) : (
                     <span className="stage idle">No recommendation</span>
                   )}
@@ -159,14 +171,25 @@ export default function PanelScreen() {
   );
 }
 
-function Current({ row, busy, doing }: { row: QueueRow; busy: boolean; doing: (fn: () => Promise<PanelView>) => void }) {
+function Current({ row, busy, doing, criteria }: { row: QueueRow; busy: boolean; doing: (fn: () => Promise<PanelView>) => void; criteria: Criterion[] }) {
   const called = useElapsed(row.status === "CALLED" ? row.calledAt : null);
   const inRoom = useElapsed(row.status === "IN_INTERVIEW" ? row.session?.startedAt : null);
   const [notes, setNotes] = useState("");
   const [rec, setRec] = useState<Recommendation | null>(null);
   const [remark, setRemark] = useState("");
+  const [ratings, setRatings] = useState<Record<string, number>>({});
+  const [strengths, setStrengths] = useState("");
+  const [concerns, setConcerns] = useState("");
   const notesId = useId();
   const remarkId = useId();
+  const strengthsId = useId();
+  const concernsId = useId();
+  const lines = (t: string) =>
+    t
+      .split("\n")
+      .map((x) => x.replace(/^[-•*]\s*/, "").trim())
+      .filter(Boolean)
+      .slice(0, 8);
   const s = row.student;
 
   return (
@@ -202,6 +225,8 @@ function Current({ row, busy, doing }: { row: QueueRow; busy: boolean; doing: (f
         )}
       </div>
 
+      <EarlierRounds history={row.history} />
+
       {row.status === "CALLED" ? (
         <div className="buttons">
           <button type="button" className="primary" disabled={busy} onClick={() => doing(() => interviewsApi.start(row.id))}>
@@ -213,9 +238,21 @@ function Current({ row, busy, doing }: { row: QueueRow; busy: boolean; doing: (f
         </div>
       ) : (
         <>
+          <p className="cy-h3 cy-kp-title">Key points (the company and the TPO only)</p>
+          <RatingInput criteria={criteria} value={ratings} onChange={setRatings} />
+          <div className="cy-grid">
+            <div className="field">
+              <label htmlFor={strengthsId}>Strengths (one per line)</label>
+              <textarea id={strengthsId} rows={3} value={strengths} onChange={(e) => setStrengths(e.target.value)} placeholder={"Clean code\nGood with SQL"} />
+            </div>
+            <div className="field">
+              <label htmlFor={concernsId}>Concerns (one per line)</label>
+              <textarea id={concernsId} rows={3} value={concerns} onChange={(e) => setConcerns(e.target.value)} placeholder={"Missed edge cases"} />
+            </div>
+          </div>
           <div className="field">
             <label htmlFor={notesId}>Private notes (the company and the TPO only)</label>
-            <textarea id={notesId} rows={4} maxLength={4000} value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <textarea id={notesId} rows={3} maxLength={4000} value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
           <fieldset className="cy-fieldset">
             <legend>Your recommendation</legend>
@@ -233,7 +270,16 @@ function Current({ row, busy, doing }: { row: QueueRow; busy: boolean; doing: (f
             <p className="field-hint">The placement office checks it before the student sees it. Keep it kind and useful.</p>
           </div>
           <div className="buttons">
-            <button type="button" className="primary" disabled={busy} onClick={() => doing(() => interviewsApi.end(row.id, { privateNotes: notes || null, recommendation: rec, feedback: remark || null }))}>
+            <button type="button" className="primary" disabled={busy} onClick={() => doing(() =>
+                  interviewsApi.end(row.id, {
+                    privateNotes: notes || null,
+                    recommendation: rec,
+                    feedback: remark || null,
+                    ratings: Object.keys(ratings).length ? ratings : null,
+                    strengths: lines(strengths),
+                    concerns: lines(concerns),
+                  }),
+                )}>
               End interview
             </button>
           </div>

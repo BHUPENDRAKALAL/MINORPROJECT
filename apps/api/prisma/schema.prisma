@@ -956,6 +956,11 @@ model InterviewSession {
   /// Visible to the company and the TPO only
   privateNotes   String?
   recommendation Recommendation?
+  /// Structured key points (company + TPO only): { criterionKey: 1-5 } from INTERVIEW_CRITERIA
+  ratings        Json?
+  /// Short bullet points: what went well, what worried the panel
+  strengths      String[]        @default([])
+  concerns       String[]        @default([])
 
   queueEntry QueueEntry @relation(fields: [queueEntryId], references: [id], onDelete: Cascade)
   panel      Panel      @relation(fields: [panelId], references: [id], onDelete: Cascade)

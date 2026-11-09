@@ -1,3 +1,4 @@
+import { INTERVIEW_CRITERIA, type RoundType } from "@cyrus/shared";
 import type { Db } from "../../lib/db.ts";
 import type { Mailer } from "../../lib/mail.ts";
 import type { Env } from "../../config/env.ts";
@@ -29,6 +30,16 @@ export function averageMinutes(sessions: { startedAt: Date; endedAt: Date | null
   const done = sessions.filter((s) => s.endedAt).map((s) => (s.endedAt!.getTime() - s.startedAt.getTime()) / 60_000);
   if (done.length < 2) return DEFAULT_INTERVIEW_MINUTES;
   return Math.max(1, Math.round(done.reduce((a, b) => a + b, 0) / done.length));
+}
+
+export type Ratings = Record<string, number>;
+
+const sessionSelect = { id: true, startedAt: true, endedAt: true, privateNotes: true, recommendation: true, interviewerId: true, ratings: true, strengths: true, concerns: true } as const;
+
+/** Average of the ratings given (one decimal), or null when none. */
+export function averageRating(r: unknown): number | null {
+  const values = Object.values((r ?? {}) as Ratings).filter((v) => typeof v === "number");
+  return values.length ? Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10 : null;
 }
 
 export function createInterviewsService({ db, mailer, env, now = Date.now }: InterviewsDeps) {
@@ -238,10 +249,11 @@ export function createInterviewsService({ db, mailer, env, now = Date.now }: Int
       orderBy: { position: "asc" },
       include: {
         participation: { select: { id: true, student: { select: { id: true, name: true, rollNo: true, branch: true, batch: true, cgpa: true, activeBacklogs: true, skills: true, links: true, resumeFileId: true } } } },
-        session: { select: { id: true, startedAt: true, endedAt: true, privateNotes: true, recommendation: true, interviewerId: true } },
+        session: { select: sessionSelect },
       },
     });
     const sessions = await db.interviewSession.findMany({ where: { panelId }, select: { startedAt: true, endedAt: true } });
+    const history = await earlierRounds(panel.round.driveId, panel.round.sequence, entries.map((e) => e.participationId));
     const feedback = await db.feedback.findMany({ where: { roundId: panel.roundId, participationId: { in: entries.map((e) => e.participationId) } }, select: { participationId: true, text: true, status: true } });
     const fb = new Map(feedback.map((f) => [f.participationId, f]));
     const row = (e: (typeof entries)[number]) => ({
@@ -253,19 +265,70 @@ export function createInterviewsService({ db, mailer, env, now = Date.now }: Int
       student: e.participation.student,
       session: e.session,
       feedback: fb.get(e.participationId) ?? null,
+      history: history.get(e.participationId) ?? [],
     });
     const current = entries.find((e) => (LIVE as readonly string[]).includes(e.status));
     return {
       id: panel.id,
       name: panel.name,
       location: panel.location,
-      round: { id: panel.roundId, title: panel.round.title, status: panel.round.status, driveId: panel.round.driveId, roleTitle: panel.round.drive.roleTitle, company: panel.round.drive.company.name },
+      round: { id: panel.roundId, title: panel.round.title, type: panel.round.type, status: panel.round.status, driveId: panel.round.driveId, roleTitle: panel.round.drive.roleTitle, company: panel.round.drive.company.name },
+      criteria: INTERVIEW_CRITERIA[panel.round.type as RoundType],
       running: running(panel.round.status),
       avgMinutes: averageMinutes(sessions),
       current: current ? row(current) : null,
       waiting: entries.filter((e) => e.status === "WAITING").map(row),
       done: entries.filter((e) => e.status === "DONE" || e.status === "ABSENT").map(row),
     };
+  }
+
+  /**
+   * What happened to each student in the drive's earlier rounds: the published result, whether they
+   * came, and every panel's notes, ratings and key points. Company + TPO only (panel screens).
+   */
+  async function earlierRounds(driveId: string, beforeSequence: number, participationIds: string[]) {
+    const out = new Map<string, unknown[]>();
+    if (!participationIds.length) return out;
+    const rounds = await db.round.findMany({ where: { driveId, sequence: { lt: beforeSequence } }, orderBy: { sequence: "asc" }, select: { id: true, title: true, type: true, status: true } });
+    if (!rounds.length) return out;
+    const roundIds = rounds.map((r) => r.id);
+    const [results, attendance, interviews] = await Promise.all([
+      db.roundResult.findMany({ where: { roundId: { in: roundIds }, participationId: { in: participationIds } }, select: { roundId: true, participationId: true, result: true } }),
+      db.attendance.findMany({ where: { roundId: { in: roundIds }, participationId: { in: participationIds } }, select: { roundId: true, participationId: true } }),
+      db.queueEntry.findMany({
+        where: { participationId: { in: participationIds }, panel: { roundId: { in: roundIds } } },
+        select: { participationId: true, status: true, panel: { select: { roundId: true, name: true } }, session: { select: sessionSelect } },
+      }),
+    ]);
+    const people = await db.user.findMany({ where: { id: { in: interviews.map((i) => i.session?.interviewerId).filter((x): x is string => !!x) } }, select: { id: true, name: true, email: true } });
+    const nameOf = (id: string) => people.find((p) => p.id === id)?.name ?? people.find((p) => p.id === id)?.email ?? null;
+    for (const pid of participationIds) {
+      out.set(
+        pid,
+        rounds.map((r) => ({
+          roundId: r.id,
+          title: r.title,
+          type: r.type,
+          // Unpublished results stay hidden here too, so nobody reads a decision before it's final.
+          result: r.status === "RESULTS_PUBLISHED" ? (results.find((x) => x.roundId === r.id && x.participationId === pid)?.result ?? null) : null,
+          attended: attendance.some((a) => a.roundId === r.id && a.participationId === pid),
+          interviews: interviews
+            .filter((i) => i.participationId === pid && i.panel.roundId === r.id)
+            .map((i) => ({
+              panel: i.panel.name,
+              status: i.status,
+              interviewer: i.session ? nameOf(i.session.interviewerId) : null,
+              recommendation: i.session?.recommendation ?? null,
+              ratings: (i.session?.ratings ?? null) as Ratings | null,
+              average: averageRating(i.session?.ratings),
+              strengths: i.session?.strengths ?? [],
+              concerns: i.session?.concerns ?? [],
+              privateNotes: i.session?.privateNotes ?? null,
+            })),
+        })),
+      );
+    }
+    return out;
   }
 
   /** Panels the signed-in interviewer (or HR) sits on, in rounds that are running now. */
@@ -320,14 +383,36 @@ export function createInterviewsService({ db, mailer, env, now = Date.now }: Int
    * Ends the interview. Private notes and the recommendation stay with the company and the TPO.
    * A remark for the student waits for the TPO's check before the student sees it.
    */
-  async function endInterview(auth: AuthContext, entryId: string, body: { privateNotes?: string | null; recommendation?: "SELECT" | "REJECT" | "HOLD" | null; feedback?: string | null }) {
+  async function endInterview(
+    auth: AuthContext,
+    entryId: string,
+    body: {
+      privateNotes?: string | null;
+      recommendation?: "SELECT" | "REJECT" | "HOLD" | null;
+      feedback?: string | null;
+      ratings?: Ratings | null;
+      strengths?: string[];
+      concerns?: string[];
+    },
+  ) {
     const { entry, panel } = await entryOf(auth, entryId);
     if (entry.status !== "IN_INTERVIEW") throw new ApiError(409, "NOT_IN_INTERVIEW", "This interview hasn't started.");
+    const allowed = INTERVIEW_CRITERIA[panel.round.type as RoundType].map((c) => c.key);
+    const unknown = Object.keys(body.ratings ?? {}).filter((k) => !allowed.includes(k));
+    if (unknown.length) throw new ApiError(400, "VALIDATION_FAILED", "Some ratings aren't used in this round.", { issues: unknown.map((k) => ({ path: `ratings.${k}`, message: "Not a criterion of this round." })) });
+    const clean = (list?: string[]) => (list ?? []).map((x) => x.trim()).filter(Boolean);
     await db.$transaction(async (tx) => {
       await tx.queueEntry.update({ where: { id: entryId }, data: { status: "DONE" } });
       await tx.interviewSession.update({
         where: { queueEntryId: entryId },
-        data: { endedAt: new Date(now()), privateNotes: body.privateNotes ?? null, recommendation: body.recommendation ?? null },
+        data: {
+          endedAt: new Date(now()),
+          privateNotes: body.privateNotes ?? null,
+          recommendation: body.recommendation ?? null,
+          ratings: body.ratings && Object.keys(body.ratings).length ? body.ratings : undefined,
+          strengths: clean(body.strengths),
+          concerns: clean(body.concerns),
+        },
       });
       if (body.feedback?.trim()) {
         await tx.feedback.create({ data: { participationId: entry.participationId, roundId: panel.roundId, authorId: auth.userId, text: body.feedback.trim() } });
@@ -381,10 +466,20 @@ export function createInterviewsService({ db, mailer, env, now = Date.now }: Int
     await manageRound(auth, roundId);
     const rows = await db.queueEntry.findMany({
       where: { panel: { roundId } },
-      select: { participationId: true, status: true, panel: { select: { name: true } }, session: { select: { privateNotes: true, recommendation: true, endedAt: true } } },
+      select: { participationId: true, status: true, panel: { select: { name: true } }, session: { select: sessionSelect } },
     });
     return {
-      interviews: rows.map((r) => ({ participationId: r.participationId, panel: r.panel.name, status: r.status, recommendation: r.session?.recommendation ?? null, privateNotes: r.session?.privateNotes ?? null })),
+      interviews: rows.map((r) => ({
+        participationId: r.participationId,
+        panel: r.panel.name,
+        status: r.status,
+        recommendation: r.session?.recommendation ?? null,
+        privateNotes: r.session?.privateNotes ?? null,
+        ratings: (r.session?.ratings ?? null) as Ratings | null,
+        average: averageRating(r.session?.ratings),
+        strengths: r.session?.strengths ?? [],
+        concerns: r.session?.concerns ?? [],
+      })),
     };
   }
 

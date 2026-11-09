@@ -1,4 +1,4 @@
-import type { DriveStatus, Eligibility, JobType, ParticipationStatus, ResultValue, Role, RoundType } from "@cyrus/shared";
+import type { Criterion, DriveStatus, Eligibility, JobType, ParticipationStatus, ResultValue, Role, RoundType } from "@cyrus/shared";
 import { APP_NAME } from "./brand";
 
 /** Base URL of the API. Empty in the browser dev server (Vite forwards /api); set VITE_API_URL for Tauri builds. */
@@ -731,7 +731,18 @@ export interface QueueRow {
     links: { label: string; url: string }[] | null;
     resumeFileId: string | null;
   };
-  session: { id: string; startedAt: string; endedAt: string | null; privateNotes: string | null; recommendation: Recommendation | null } | null;
+  session: {
+    id: string;
+    startedAt: string;
+    endedAt: string | null;
+    privateNotes: string | null;
+    recommendation: Recommendation | null;
+    ratings: Record<string, number> | null;
+    strengths: string[];
+    concerns: string[];
+  } | null;
+  /** The student's earlier rounds in this drive: result, attendance, every panel's notes and key points. */
+  history: EarlierRound[];
   feedback: { text: string; status: string } | null;
 }
 
@@ -739,7 +750,9 @@ export interface PanelView {
   id: string;
   name: string;
   location: string | null;
-  round: { id: string; title: string; status: string; driveId: string; roleTitle: string; company: string };
+  round: { id: string; title: string; type: RoundType; status: string; driveId: string; roleTitle: string; company: string };
+  /** What this round's panels rate, 1–5 */
+  criteria: Criterion[];
   running: boolean;
   avgMinutes: number;
   current: QueueRow | null;
@@ -764,14 +777,23 @@ export const interviewsApi = {
   addPanel: (roundId: string, body: { name: string; location?: string | null; memberIds: string[] }) => api<{ panels: PanelSummary[] }>(`/rounds/${roundId}/panels`, { method: "POST", body }),
   removePanel: (panelId: string) => api<{ panels: PanelSummary[] }>(`/panels/${panelId}`, { method: "DELETE" }),
   buildLine: (roundId: string) => api<{ added: number; panels: PanelSummary[] }>(`/rounds/${roundId}/queue`, { method: "POST" }),
-  recommendations: (roundId: string) =>
-    api<{ interviews: { participationId: string; panel: string; status: QueueStatus; recommendation: Recommendation | null; privateNotes: string | null }[] }>(`/rounds/${roundId}/interviews`),
+  recommendations: (roundId: string) => api<{ interviews: PanelOpinion[] }>(`/rounds/${roundId}/interviews`),
   myPanels: () =>
     api<{ panels: { id: string; name: string; location: string | null; round: { title: string; status: string; startsAt: string | null; roleTitle: string; company: string }; waiting: number; done: number }[] }>("/me/panels"),
   panel: (panelId: string) => api<PanelView>(`/panels/${panelId}`),
   callNext: (panelId: string) => api<PanelView>(`/panels/${panelId}/call-next`, { method: "POST" }),
   start: (entryId: string) => api<PanelView>(`/queue/${entryId}/start`, { method: "POST" }),
-  end: (entryId: string, body: { privateNotes?: string | null; recommendation?: Recommendation | null; feedback?: string | null }) => api<PanelView>(`/queue/${entryId}/end`, { method: "POST", body }),
+  end: (
+    entryId: string,
+    body: {
+      privateNotes?: string | null;
+      recommendation?: Recommendation | null;
+      feedback?: string | null;
+      ratings?: Record<string, number> | null;
+      strengths?: string[];
+      concerns?: string[];
+    },
+  ) => api<PanelView>(`/queue/${entryId}/end`, { method: "POST", body }),
   skip: (entryId: string) => api<PanelView>(`/queue/${entryId}/skip`, { method: "POST" }),
   requeue: (entryId: string) => api<PanelView>(`/queue/${entryId}/requeue`, { method: "POST" }),
   move: (entryId: string, panelId: string) => api<PanelView>(`/queue/${entryId}/move`, { method: "POST", body: { panelId } }),
@@ -815,4 +837,51 @@ export const offersApi = {
   accept: (offerId: string) => api<{ status: string }>(`/me/offers/${offerId}/accept`, { method: "POST" }),
   decline: (offerId: string) => api<{ status: string }>(`/me/offers/${offerId}/decline`, { method: "POST" }),
   closeDrive: (driveId: string) => api<{ status: string }>(`/admin/drives/${driveId}/close`, { method: "POST" }),
+};
+
+export interface KeyPoints {
+  recommendation: Recommendation | null;
+  ratings: Record<string, number> | null;
+  average: number | null;
+  strengths: string[];
+  concerns: string[];
+  privateNotes: string | null;
+}
+
+/** One panel's view of one student in a round (HR's results table). */
+export interface PanelOpinion extends KeyPoints {
+  participationId: string;
+  panel: string;
+  status: QueueStatus;
+}
+
+export interface EarlierRound {
+  roundId: string;
+  title: string;
+  type: RoundType;
+  result: ResultValue | null;
+  attended: boolean;
+  interviews: (KeyPoints & { panel: string; status: QueueStatus; interviewer: string | null })[];
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+export interface NotificationItem {
+  id: string;
+  channel: "QUEUE" | "DRIVES" | "OFFERS" | "GENERAL";
+  title: string;
+  body: string;
+  link: string | null;
+  /** In-app path to open (null when the notice has no page) */
+  path: string | null;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export const notificationsApi = {
+  list: (before?: string) => api<{ unread: number; items: NotificationItem[]; more: boolean }>(`/me/notifications${before ? `?before=${encodeURIComponent(before)}` : ""}`),
+  unreadCount: () => api<{ unread: number }>("/me/notifications/unread-count"),
+  read: (ids?: string[]) => api<{ unread: number }>("/me/notifications/read", { method: "POST", body: ids ? { ids } : {} }),
 };

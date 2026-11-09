@@ -127,7 +127,7 @@ function FullDrive({ drive, onChange }: { drive: Full; onChange: (d: StudentDriv
             <h2>Rounds</h2>
           </div>
           <RoundTimeline rounds={drive.rounds} />
-          {drive.me.status !== "OPTED_IN" && drive.rounds.some((r) => r.mode === "ONLINE") && <p className="faint small">Online test links appear here after you join.</p>}
+          {drive.me.canJoin && drive.rounds.some((r) => r.mode === "ONLINE") && <p className="faint small">Online test links appear here after you join.</p>}
         </section>
         <section className="stack">
           <div className="panel stack">

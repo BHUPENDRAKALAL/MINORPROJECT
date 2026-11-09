@@ -97,6 +97,7 @@ export const OFFICE_AREA: NavArea = {
       empty: "Placement drives from draft to results: eligibility, shortlists, rounds and offers.",
       sprite: "smith",
     },
+    { key: "notifications", to: "/office/notifications", label: "Notifications", icon: "needs", family: "sun" },
     {
       key: "team", to: "/office/team", label: "Team", icon: "activity", family: "sun", only: ["TPO"],
       empty: "Your placement staff and volunteers, what each of them may do, and invites you have sent.",
@@ -116,6 +117,7 @@ export const COMPANY_AREA: NavArea = {
   items: [
     // HR's home is their drives list.
     { key: "drives", to: "/company", label: "Drives", icon: "jobs", family: "azure", under: "/company/drives" },
+    { key: "notifications", to: "/company/notifications", label: "Notifications", icon: "needs", family: "sun" },
     {
       key: "team", to: "/company/team", label: "Team", icon: "activity", family: "sun",
       empty: "Colleagues and interviewers you invite will be listed here.",
@@ -139,6 +141,7 @@ export const INTERVIEWER_AREA: NavArea = {
       empty: "On interview day, the queue of students for your panel will appear here, with each student's profile and a form for your feedback.",
       sprite: "reviewer",
     },
+    { key: "notifications", to: "/interviewer/notifications", label: "Notifications", icon: "needs", family: "sun" },
   ],
 };
 

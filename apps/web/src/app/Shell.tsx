@@ -8,6 +8,7 @@ import { APP_NAME } from "../lib/brand";
 import { ROLE_LABELS, ROLE_PRIORITY } from "../lib/constants";
 import { useAuth } from "./useAuth";
 import { homeFor, isCurrent, navFor, type NavItem } from "./nav";
+import { useUnread } from "./useUnread";
 import { useTheme } from "./theme";
 import { useSidePanel } from "./useSidePanel";
 
@@ -29,6 +30,17 @@ function useCloseOnNavigate() {
   return ref;
 }
 
+/** The unread badge next to Notifications. */
+function UnreadCount() {
+  const n = useUnread();
+  if (!n) return null;
+  return (
+    <span className="nav-count cy-unread" aria-label={`${n} unread`}>
+      {n > 99 ? "99+" : n}
+    </span>
+  );
+}
+
 function NavRow({ item }: { item: NavItem }) {
   const { pathname } = useLocation();
   return (
@@ -36,6 +48,7 @@ function NavRow({ item }: { item: NavItem }) {
       <Link className="nav-item" to={item.to} aria-current={isCurrent(item, pathname) ? "page" : undefined}>
         <Icon name={item.icon} />
         <span className="nav-name">{item.label}</span>
+        {item.key === "notifications" && <UnreadCount />}
       </Link>
     </li>
   );
@@ -47,6 +60,7 @@ function Tab({ item }: { item: NavItem }) {
     <Link className="tab" to={item.to} aria-label={item.title ?? item.label} aria-current={isCurrent(item, pathname) ? "page" : undefined}>
       <Icon name={item.icon} />
       <span className="tab-name">{item.label}</span>
+      {item.key === "notifications" && <UnreadCount />}
     </Link>
   );
 }

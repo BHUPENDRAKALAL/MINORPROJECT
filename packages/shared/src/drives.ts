@@ -105,3 +105,24 @@ export const RESULT_LABELS = {
   ON_HOLD: "On hold",
 } as const;
 export type ResultValue = keyof typeof RESULT_LABELS;
+
+/** What a panel rates (1–5) in each kind of round: the structured key points of an interview. */
+export interface Criterion {
+  key: string;
+  label: string;
+}
+const C = (key: string, label: string): Criterion => ({ key, label });
+export const INTERVIEW_CRITERIA: Record<RoundType, Criterion[]> = {
+  TECHNICAL: [C("problem_solving", "Problem solving"), C("technical_knowledge", "Technical knowledge"), C("coding", "Coding"), C("communication", "Communication")],
+  INTERVIEW: [C("technical_knowledge", "Technical knowledge"), C("problem_solving", "Problem solving"), C("communication", "Communication"), C("confidence", "Confidence")],
+  HR: [C("communication", "Communication"), C("attitude", "Attitude"), C("career_goals", "Career goals fit"), C("culture_fit", "Team and culture fit")],
+  GD: [C("communication", "Communication"), C("ideas", "Ideas"), C("teamwork", "Teamwork")],
+  OA: [C("problem_solving", "Problem solving")],
+  PPT: [],
+  OTHER: [C("communication", "Communication"), C("problem_solving", "Problem solving")],
+};
+
+export const RATING_LABELS: Record<number, string> = { 1: "Poor", 2: "Weak", 3: "Okay", 4: "Good", 5: "Excellent" };
+
+/** Most strengths / concerns one interview can list. */
+export const MAX_KEY_POINTS = 8;

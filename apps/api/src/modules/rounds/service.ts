@@ -183,7 +183,7 @@ export function createRoundsService({ db, mailer, env, now = Date.now }: RoundsD
       await tx.round.update({ where: { id }, data: { status: "IN_PROGRESS" } });
       await audit(tx, { actorId: auth.userId, action: "round.started", entityType: "Round", entityId: id });
       await emit(tx, "round.updated", { driveId: round.driveId, roundId: id, status: "IN_PROGRESS" });
-      return tellActive(tx, round, `${round.title} has started`, round.mode === "ONLINE" ? "Open the drive for the link and instructions." : `Go to ${round.venue ?? "the venue"} and check in with the QR code shown there.`);
+      return tellActive(tx, round, `${round.title} has started`, round.mode === "ONLINE" ? "Open the drive for the link and instructions." : `Go to ${round.venue ?? "the venue"}. If a check-in QR code is shown there, scan it with your phone camera.`);
     });
     await sendAfterCommit(mailer, emails);
     return view(auth, id);

@@ -1,4 +1,5 @@
 import express, { type Express } from "express";
+import { createHash } from "node:crypto";
 import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
@@ -13,7 +14,7 @@ import type { Env } from "../config/env.ts";
 import type { Db } from "../lib/db.ts";
 import type { Mailer } from "../lib/mail.ts";
 import { errorHandler, notFound } from "./errors.ts";
-import { mountRoutes, type MountContext } from "./define-route.ts";
+import { clientIpKey, mountRoutes, type MountContext } from "./define-route.ts";
 import { routeTiming } from "./timing.ts";
 import { healthRoutes } from "../modules/health/routes.ts";
 import { createAuthService } from "../modules/auth/service.ts";
@@ -35,6 +36,7 @@ import { createInterviewsService } from "../modules/interviews/service.ts";
 import { interviewRoutes } from "../modules/interviews/routes.ts";
 import { createOffersService } from "../modules/offers/service.ts";
 import { offerRoutes } from "../modules/offers/routes.ts";
+import { notificationRoutes } from "../modules/notifications/routes.ts";
 
 export interface AppDeps {
   env: Env;
@@ -56,6 +58,13 @@ export interface AppDeps {
 }
 
 const PREFIX = "/api/v1";
+
+/** Rate-limit bucket: a hash of the bearer token when there is one (one per session), else the client IP. */
+export function globalLimitKey(req: express.Request): string {
+  const auth = req.headers.authorization;
+  if (auth?.startsWith("Bearer ") && auth.length > 20) return `s:${createHash("sha256").update(auth.slice(7)).digest("base64url").slice(0, 22)}`;
+  return `ip:${clientIpKey(req)}`;
+}
 
 /** Builds the Express app. Kept separate from start-up so tests can use supertest. */
 export function buildApp(deps: AppDeps): Express {
@@ -79,6 +88,10 @@ export function buildApp(deps: AppDeps): Express {
       limit: 300,
       standardHeaders: "draft-8",
       legacyHeaders: false,
+      // Signed-in requests count per session, not per IP: a whole campus shares one public IP on
+      // college Wi-Fi, and on drive day hundreds of students would otherwise share one bucket.
+      // Anonymous requests (sign-in, sign-up…) still count per IP.
+      keyGenerator: globalLimitKey,
       // If Redis is down, let requests through (and /ready reports it) instead of failing every request.
       passOnStoreError: true,
       ...(deps.redis ? { store: redisStore("rl:global:") } : {}),
@@ -102,6 +115,7 @@ export function buildApp(deps: AppDeps): Express {
     const offers = deps.storage ? createOffersService({ db: deps.db, mailer: deps.mailer, storage: deps.storage, env, now: deps.now }) : null;
     mountRoutes(v1, registry, PREFIX, driveRoutes(createDrivesService({ db: deps.db, mailer: deps.mailer, env, myLine: interviews.myLine, myOffer: offers?.mine })), ctx);
     if (offers) mountRoutes(v1, registry, PREFIX, offerRoutes(offers), ctx);
+    mountRoutes(v1, registry, PREFIX, notificationRoutes(deps.db, env.WEB_APP_URL), ctx);
     mountRoutes(v1, registry, PREFIX, roundRoutes(createRoundsService({ db: deps.db, mailer: deps.mailer, env, now: deps.now })), ctx);
     mountRoutes(v1, registry, PREFIX, interviewRoutes(interviews, service, deps.db), ctx);
     if (deps.storage && deps.enqueue) {
