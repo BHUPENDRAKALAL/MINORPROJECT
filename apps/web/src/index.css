@@ -68,21 +68,6 @@ input[type="number"] { appearance: textfield; }
 .alert .quiet { display: inline; min-height: 0; color: var(--ink); text-decoration: underline; }
 .alert > span { min-width: 0; }
 
-/* Auth pages: the form straight on the page, and the art on the other half of a wide screen */
-.auth-page { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-height: var(--screen); background: var(--paper); }
-.auth-main { display: flex; align-items: center; justify-content: center; min-width: 0; max-width: none; padding: var(--space-64) var(--space-48); }
-.auth-form { width: 100%; max-width: var(--sign-in); }
-.auth-form h1 { font-size: var(--text-32); line-height: var(--line-32); letter-spacing: -0.02em; }
-.auth-form > .lead { margin: var(--space-8) 0 var(--space-32); }
-.auth-form > h1 + .result { margin-top: var(--space-24); }
-.auth-form > .alert { margin: 0 0 var(--space-16); }
-.auth-form .stack { margin: 0; gap: var(--space-16); }
-.auth-form .button-wide { margin-top: var(--space-8); }
-.auth-art { position: sticky; top: 0; isolation: isolate; height: calc(var(--screen) - 2 * var(--space-16)); margin: var(--space-16) var(--space-16) var(--space-16) 0; overflow: hidden; border-radius: var(--radius-24); }
-.auth-art .grid-tile { position: absolute; inset: 0; z-index: -1; }
-.auth-art .sprite { position: absolute; left: var(--size-64); bottom: var(--size-96); }
-.auth-art:hover .sprite { --hover-reaction: hop; }
-
 /* A result moment on the sign-in panel: a sticker, the words, the next step. */
 .result { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-8); }
 .result h2 { font-size: var(--text-20); line-height: var(--line-20); }
@@ -105,9 +90,6 @@ input[type="number"] { appearance: textfield; }
 .tab-name { overflow: hidden; max-width: 100%; text-overflow: ellipsis; white-space: nowrap; padding-inline: var(--space-4); }
 
 @media (max-width: 1024px) {
-  .auth-page { grid-template-columns: minmax(0, 1fr); }
-  .auth-art { display: none; }
-  .auth-main { align-items: flex-start; padding: var(--space-64) var(--space-24) var(--space-48); }
   .side .user-menu-side { display: none; }
   .user-menu-top { display: block; flex: none; margin: 0; }
   .user-menu-top > summary { padding: var(--space-4); }
@@ -121,8 +103,6 @@ input[type="number"] { appearance: textfield; }
 }
 
 @media (max-width: 640px) {
-  .auth-main { padding: var(--space-48) var(--gutter) var(--space-32); }
-  .auth-form h1 { font-size: var(--text-24); line-height: var(--line-24); }
   .field-row { grid-template-columns: minmax(0, 1fr); }
   .panel.stack { padding: var(--space-16); }
   select { font-size: var(--text-16); line-height: var(--line-16); }
@@ -342,3 +322,10 @@ button.banner-go { border: 0; cursor: pointer; }
   .cy-rating-name { flex-basis: 100%; }
   .cy-note-meta { display: none; }
 }
+
+/* Side panel groups: a quiet heading over each group; Foundry's .side-nav spaces the groups apart */
+.nav-group { display: flex; flex-direction: column; gap: var(--space-4); }
+.side-nav .nav-label { margin: 0; padding: 0 var(--space-8); color: var(--ink-quiet); text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Folded to the icon rail: no headings, a thin line between groups instead */
+.shell:has(.side-toggle:checked) .nav-group + .nav-group { padding-top: var(--space-12); border-top: 1px solid var(--rule); }
+.shell:has(.side-toggle:checked) .side-nav { gap: var(--space-12); }

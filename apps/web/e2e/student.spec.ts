@@ -29,12 +29,12 @@ test("a student fills the profile, uploads marksheets, sends it, withdraws and s
   await expect(page.getByText("Saved.").first()).toBeVisible();
 
   // Marks: a wrong value is caught by the API and shown on the field
-  await page.getByLabel("CGPA (out of 10)").fill("12");
-  await page.getByLabel("Class 10 percentage").fill("88");
-  await page.getByLabel("Class 12 percentage").fill("84");
+  await page.getByLabel("CGPA", { exact: true }).fill("12");
+  await page.getByLabel("Class 10", { exact: true }).fill("88");
+  await page.getByLabel("Class 12 (optional)").fill("84");
   await page.getByRole("button", { name: "Save marks" }).click();
   await expect(page.getByText("CGPA is out of 10.")).toBeVisible();
-  await page.getByLabel("CGPA (out of 10)").fill("8.05");
+  await page.getByLabel("CGPA", { exact: true }).fill("8.05");
   await page.getByLabel("Up to semester").selectOption("5");
   await page.getByRole("button", { name: "Save marks" }).click();
   await expect(page.locator(".cy-missing li")).toHaveCount(3);
@@ -43,6 +43,13 @@ test("a student fills the profile, uploads marksheets, sends it, withdraws and s
   const rows = page.locator(".cy-doc");
   await rows.nth(0).locator('input[type="file"]').setInputFiles({ name: "fake.pdf", mimeType: "application/pdf", buffer: Buffer.from("not a pdf") });
   await expect(page.getByText(/file type isn't accepted/)).toBeVisible();
+
+  // A file that starts like a PDF but isn't one passes the type check, then the worker can't rebuild it:
+  // the student is told why and can upload again
+  const broken = Buffer.from(["%PDF-1.4", "this is not really a pdf", ""].join("\n"));
+  await rows.nth(0).locator('input[type="file"]').setInputFiles({ name: "broken.pdf", mimeType: "application/pdf", buffer: broken });
+  await expect(rows.nth(0).getByText("Not accepted: upload again")).toBeVisible({ timeout: 20_000 });
+  await expect(rows.nth(0).getByText(/damaged or not a real PDF/)).toBeVisible();
 
   // Real uploads
   await rows.nth(0).locator('input[type="file"]').setInputFiles({ name: "class10.pdf", mimeType: "application/pdf", buffer: pdf("Class 10 Meera") });
@@ -62,13 +69,13 @@ test("a student fills the profile, uploads marksheets, sends it, withdraws and s
   await expect(page.locator(".cy-missing")).toHaveCount(0);
   await page.getByRole("button", { name: "Send for verification" }).click();
   await expect(page.locator(".banner-title", { hasText: "Your profile is being checked" })).toBeVisible();
-  await expect(page.getByLabel("CGPA (out of 10)")).toBeDisabled();
+  await expect(page.getByLabel("CGPA", { exact: true })).toBeDisabled();
   await expect(page.locator(".cy-timeline .stage.working")).toHaveText("Being checked");
 
   // Withdraw and send again
   await page.getByRole("button", { name: "Withdraw to make changes" }).click();
   await expect(page.getByText("Complete your profile").first()).toBeVisible();
-  await expect(page.getByLabel("CGPA (out of 10)")).toBeEnabled();
+  await expect(page.getByLabel("CGPA", { exact: true })).toBeEnabled();
   await page.getByRole("button", { name: "Send for verification" }).click();
   await expect(page.locator(".banner-title", { hasText: "Your profile is being checked" })).toBeVisible();
 
@@ -82,10 +89,10 @@ test("a verified student sees locked marks and can send a change request", async
   await signIn(page, demo("verified.student"));
   await page.goto("/student/profile");
   await expect(page.locator(".banner-title", { hasText: "Your profile is verified" })).toBeVisible();
-  await expect(page.getByLabel("CGPA (out of 10)").first()).toBeDisabled();
+  await expect(page.getByLabel("CGPA", { exact: true }).first()).toBeDisabled();
   await page.getByRole("button", { name: "Request a change" }).click();
   const form = page.locator("form").filter({ hasText: "Why the change" });
-  await form.getByLabel("CGPA (out of 10)").fill("8.4");
+  await form.getByLabel("CGPA", { exact: true }).fill("8.4");
   await form.getByLabel("Up to semester").selectOption("6");
   await form.getByLabel("Why the change (optional)").fill("Semester 6 results are out.");
   await form.getByRole("button", { name: "Send change request" }).click();

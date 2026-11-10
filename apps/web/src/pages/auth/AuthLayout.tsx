@@ -1,9 +1,11 @@
 // Adapted from Foundry (Apache-2.0), see src/vendor/foundry/LICENSE
-// Based on Foundry's sign-in stage (login.html): the grid tile and a character beside the form.
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import type { SpriteName } from "../../app/nav";
-import { GridTile, Sprite, Sticker, Wordmark, type StickerName } from "../../components/ui";
+import { AuthShowcase } from "../../components/AuthShowcase";
+import { MeshBackdrop } from "../../components/MeshBackdrop";
+import { BrandMark, Sticker, Wordmark, type StickerName } from "../../components/ui";
+import { CaretBuddyContext } from "../../lib/caretBuddy";
 import { APP_NAME } from "../../lib/brand";
 import { useTitle } from "../../lib/useTitle";
 
@@ -21,37 +23,47 @@ export function BarePage({ children }: { children: ReactNode }) {
 }
 
 /**
- * Auth pages: the form sits straight on the page (no panel, no brand), with Foundry's grid tile and a character
- * filling the other half on wide screens. On a phone only the form shows.
+ * Auth pages, split like most good sign-in screens: the form on the left (brand on top, title, one line, the form,
+ * the links), and on a wide screen a panel on the right with a slow grainy mesh gradient (see MeshBackdrop).
+ * The page's character is the text cursor in the form's fields (see CaretBuddy).
  */
 export function AuthLayout({
   title,
   lead,
-  sprite = "wave",
-  family = "lime",
+  sprite = "apprentice",
   children,
 }: {
   title: string;
   lead?: ReactNode;
-  /** null hides the character, for result moments that show a sticker instead. */
+  /** The character that stands in for the text cursor; null keeps the normal cursor. */
   sprite?: SpriteName | null;
-  family?: "lime" | "azure" | "orchid" | "sun" | "ember";
   children: ReactNode;
 }) {
   useTitle(title);
   return (
     <div className="auth-page">
       <main id="main" className="auth-main">
-        <div className="auth-form">
-          <h1>{title}</h1>
-          {lead && <p className="lead">{lead}</p>}
-          {children}
+        <Link className="auth-brand" to="/" aria-label={`${APP_NAME} home`}>
+          <BrandMark className="auth-brand-mark" />
+          <span>{APP_NAME}</span>
+        </Link>
+        <div className="auth-body">
+          <h1 className="auth-title">{title}</h1>
+          {lead && <p className="auth-lead">{lead}</p>}
+          <div className="auth-card">
+            <CaretBuddyContext.Provider value={sprite}>{children}</CaretBuddyContext.Provider>
+          </div>
         </div>
+        <p className="auth-legal">MBM University · Training and Placement Cell</p>
       </main>
-      <div className="auth-art" aria-hidden="true">
-        <GridTile family={family} />
-        {sprite && <Sprite name={sprite} size={96} plays />}
-      </div>
+      <aside className="auth-art" aria-hidden="true">
+        <MeshBackdrop className="auth-mesh" />
+        <AuthShowcase />
+        <div className="auth-art-copy">
+          <p className="auth-art-kicker">Cyrus</p>
+          <p className="auth-art-line">Every drive, from the first invite to the offer letter, in one calm place.</p>
+        </div>
+      </aside>
     </div>
   );
 }

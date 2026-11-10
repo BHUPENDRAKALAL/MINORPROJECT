@@ -15,6 +15,7 @@ import SignIn from "./pages/auth/SignIn";
 import SignUp from "./pages/auth/SignUp";
 import VerifyEmail from "./pages/auth/VerifyEmail";
 import ChangePassword from "./pages/app/ChangePassword";
+import Account from "./pages/app/Account";
 import Placeholder from "./pages/app/Placeholder";
 import StudentHome from "./pages/app/StudentHome";
 import StudentProfile from "./pages/app/StudentProfile";
@@ -31,6 +32,8 @@ import CheckIn from "./pages/app/drives/CheckIn";
 import PanelScreen from "./pages/app/drives/PanelScreen";
 import { CompanyTeam, MyPanels } from "./pages/app/drives/Interviews";
 import Notifications from "./pages/app/Notifications";
+import OfficeOverview from "./pages/app/OfficeOverview";
+import { Toasts } from "./app/Toasts";
 
 function Loading() {
   return (
@@ -143,6 +146,7 @@ function StatusRoute() {
 function pageFor(area: NavArea, key: string) {
   if (area === STUDENT_AREA && key === "home") return <StudentHome />;
   if (area === STUDENT_AREA && key === "profile") return <StudentProfile />;
+  if (area === OFFICE_AREA && key === "overview") return <OfficeOverview />;
   if (area === OFFICE_AREA && key === "review") return <ReviewQueue />;
   if (area === OFFICE_AREA && key === "team") return <Team />;
   if (area === STUDENT_AREA && key === "drives") return <StudentDrives />;
@@ -204,6 +208,7 @@ export function AppRoutes() {
         {SUB_PAGES.map((p) => (
           <Route key={p.path} path={p.path} element={<RequireRole roles={p.roles}>{p.element}</RequireRole>} />
         ))}
+        <Route path="/account" element={<Account />} />
         <Route path="/account/password" element={<ChangePassword />} />
         <Route path="*" element={<NotFound />} />
       </Route>
@@ -215,6 +220,7 @@ export default function App() {
   return (
     <AuthProvider>
       <ShapeDefs />
+      <Toasts />
       <BrowserRouter>
         <AppRoutes />
       </BrowserRouter>

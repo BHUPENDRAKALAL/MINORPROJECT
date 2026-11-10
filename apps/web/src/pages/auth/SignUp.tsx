@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
-import { Field, SelectField } from "../../components/form";
+import { Field, PasswordMeter, SelectField } from "../../components/form";
 import { useApiForm, type FieldErrors } from "../../components/useApiForm";
 import { Alert } from "../../components/ui";
 import { authApi } from "../../lib/api";
-import { BATCH_MAX, BATCH_MIN, BRANCHES, PASSWORD_HINT, passwordProblem } from "../../lib/constants";
+import { BATCH_MAX, BATCH_MIN, BRANCHES, passwordProblem } from "../../lib/constants";
 import { AuthLayout } from "./AuthLayout";
 
 const thisYear = new Date().getFullYear();
@@ -63,7 +63,6 @@ export default function SignUp() {
       title="Create your student account"
       lead="Use your college details. We'll email you a 6-digit code to confirm it's you."
       sprite="apprentice"
-      family="sun"
     >
       {form.error && (
         <Alert>
@@ -77,8 +76,8 @@ export default function SignUp() {
         </Alert>
       )}
       <form className="stack" onSubmit={onSubmit} noValidate>
-        <Field label="Roll number" autoComplete="off" autoCapitalize="characters" value={v.rollNo} onChange={set("rollNo")} error={fe.rollNo ?? taken.rollNo} required />
-        <Field label="Full name" autoComplete="name" value={v.name} onChange={set("name")} error={fe.name} required />
+        <Field label="Roll number" placeholder="e.g. 21CS001" autoComplete="off" autoCapitalize="characters" value={v.rollNo} onChange={set("rollNo")} error={fe.rollNo ?? taken.rollNo} required />
+        <Field label="Full name" placeholder="As on your marksheet" autoComplete="name" value={v.name} onChange={set("name")} error={fe.name} required />
         <div className="field-row">
           <SelectField label="Branch" value={v.branch} onChange={set("branch")} error={fe.branch} required>
             <option value="" disabled>
@@ -96,24 +95,26 @@ export default function SignUp() {
             inputMode="numeric"
             min={BATCH_MIN}
             max={BATCH_MAX}
+            placeholder="e.g. 2027"
             value={v.batch}
             onChange={set("batch")}
             error={fe.batch}
             required
           />
         </div>
-        <Field label="Email" type="email" autoComplete="email" autoCapitalize="none" value={v.email} onChange={set("email")} error={fe.email ?? taken.email} required />
+        <Field label="Email" type="email" placeholder="name@example.com" autoComplete="email" autoCapitalize="none" value={v.email} onChange={set("email")} error={fe.email ?? taken.email} required />
         <Field
           label="Password"
           type="password"
           autoComplete="new-password"
+          placeholder="At least 8 characters"
           value={v.password}
           onChange={set("password")}
           error={fe.password}
-          hint={PASSWORD_HINT}
+          hint={<PasswordMeter value={v.password} />}
           required
         />
-        <button className="primary button-wide" type="submit" disabled={form.busy}>
+        <button className="primary button-wide" type="submit" disabled={form.busy} aria-busy={form.busy}>
           {form.busy ? "Creating your account…" : "Create account"}
         </button>
       </form>

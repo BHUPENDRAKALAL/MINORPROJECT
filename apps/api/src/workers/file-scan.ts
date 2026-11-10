@@ -1,31 +1,44 @@
 import type { Db } from "../lib/db.ts";
 import type { Storage } from "../lib/storage.ts";
+import type { Sanitizer } from "../lib/sanitizer.ts";
+import { SanitizeRejected } from "../sanitizer/sanitize.ts";
 
 /**
- * Checks an uploaded file before anyone else may open it (documents queue).
+ * Makes an uploaded file safe before anyone but its owner may open it (documents queue).
  *
- * For now this is a basic check: PDFs that carry scripts or auto-launch actions are blocked,
- * because those are the usual way a "marksheet" PDF carries something harmful.
- * A full antivirus engine (ClamAV) can be plugged in here later without changing callers.
+ * We don't try to detect what is bad in a file. The file is rebuilt: PDFs keep only their pages
+ * (scripts, auto-run actions and attached files are never copied), images are encoded again.
+ * The clean copy REPLACES the upload in storage; the original is not kept.
+ * The work happens in a throw-away process or the sanitizer container (see lib/sanitizer.ts).
+ *
+ *  - CLEAN:    the stored file is now the clean copy
+ *  - INFECTED: the file was refused (password-protected, damaged, too big…); scanNote says why,
+ *              and the stored upload is deleted
+ *  - FAILED:   the sanitizer itself broke; the job is retried
+ *
+ * `sha256` stays the hash of the ORIGINAL upload, so the same marksheet uploaded by two students
+ * is still noticed.
  */
-// /OpenAction is left out on purpose: many normal PDFs use it just to set the opening page or zoom.
-const RISKY_PDF_MARKERS = ["/JavaScript", "/JS", "/Launch", "/EmbeddedFile"];
-
-export async function scanFile(db: Db, storage: Storage, fileId: string) {
+export async function scanFile(db: Db, storage: Storage, sanitize: Sanitizer, fileId: string) {
   const file = await db.fileObject.findUnique({ where: { id: fileId } });
-  if (!file || file.scanStatus !== "PENDING") return { skipped: true };
+  // FAILED files are tried again when the job is retried.
+  if (!file || (file.scanStatus !== "PENDING" && file.scanStatus !== "FAILED")) return { skipped: true };
+  let clean;
   try {
-    const body = await storage.get(file.storageKey);
-    let found: string[] = [];
-    if (file.mimeType === "application/pdf") {
-      const text = body.toString("latin1");
-      found = RISKY_PDF_MARKERS.filter((m) => new RegExp(`${m.replace("/", "\\/")}\\b`).test(text));
-    }
-    const scanStatus = found.length ? "INFECTED" : "CLEAN";
-    await db.fileObject.update({ where: { id: fileId }, data: { scanStatus } });
-    return { scanStatus, found, engine: "basic-pdf-check" };
+    clean = await sanitize(await storage.get(file.storageKey), file.mimeType);
   } catch (e) {
+    if (e instanceof SanitizeRejected) {
+      await db.fileObject.update({ where: { id: fileId }, data: { scanStatus: "INFECTED", scanNote: e.message } });
+      await storage.remove(file.storageKey).catch(() => undefined);
+      return { scanStatus: "INFECTED", code: e.code };
+    }
     await db.fileObject.update({ where: { id: fileId }, data: { scanStatus: "FAILED" } });
     throw e;
   }
+  await storage.put(file.storageKey, clean.bytes, clean.mimeType);
+  await db.fileObject.update({
+    where: { id: fileId },
+    data: { scanStatus: "CLEAN", sizeBytes: clean.bytes.length, scanNote: clean.notes.length ? clean.notes.join("; ").slice(0, 500) : null },
+  });
+  return { scanStatus: "CLEAN", notes: clean.notes, engine: "rebuild" };
 }

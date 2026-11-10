@@ -89,7 +89,7 @@ export function createFilesService({ db, storage, enqueue }: FilesDeps) {
         allowed = !!shared;
       }
       if (!allowed) throw new ApiError(403, "FORBIDDEN", "You can't open this file.");
-      if (file.scanStatus === "INFECTED") throw new ApiError(423, "FILE_BLOCKED", "This file failed the virus check and can't be opened.");
+      if (file.scanStatus === "INFECTED") throw new ApiError(423, "FILE_BLOCKED", file.scanNote ?? "This file was refused and can't be opened.");
       if (file.scanStatus === "PENDING" && !isOwner) throw new ApiError(425, "FILE_CHECKING", "This file is still being checked. Try again in a minute.");
       return { url: await storage.signedUrl(file.storageKey, LINK_SECONDS, file.originalName), expiresInSeconds: LINK_SECONDS };
     },

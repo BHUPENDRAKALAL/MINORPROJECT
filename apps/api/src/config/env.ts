@@ -57,6 +57,15 @@ const EnvSchema = z.object({
   ROUTE_LIMITS: z.enum(["on", "off"]).default("on"),
   /** Largest upload accepted, in megabytes. */
   UPLOAD_MAX_MB: z.coerce.number().int().min(1).max(50).default(10),
+  /**
+   * Where the sanitizer container listens (e.g. http://localhost:4010). Empty: uploaded files are
+   * cleaned in a throw-away process on the worker's machine instead.
+   */
+  SANITIZER_URL: z
+    .string()
+    .url()
+    .optional()
+    .or(z.literal("").transform(() => undefined)),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

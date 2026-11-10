@@ -7,6 +7,9 @@ export default defineConfig({
     realtime: "src/main/realtime.ts",
     worker: "src/main/worker.ts",
     relay: "src/main/relay.ts",
+    // Started by the worker, one fresh process per uploaded file (must sit next to worker.js)
+    "sanitize-child": "src/sanitizer/sanitize-child.ts",
+    sanitizer: "src/sanitizer/server.ts",
   },
   format: ["esm"],
   platform: "node",

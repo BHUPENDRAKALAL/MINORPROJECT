@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useAuth } from "../../../app/useAuth";
 import { useApiForm } from "../../../components/useApiForm";
-import { Alert, PageTitle, Saved } from "../../../components/ui";
+import { Aside, Stat } from "../../../components/kit";
+import { Alert, Saved } from "../../../components/ui";
 import { drivesApi, type EligibleStudent, type OfficeDrive, type Participant } from "../../../lib/api";
 import { useTitle } from "../../../lib/useTitle";
 import { FeedbackReview } from "./Interviews";
@@ -41,32 +42,42 @@ export default function DriveDetail() {
 
   return (
     <>
-      <header className="page-head">
-        <PageTitle trail={[{ label: "Drives", to: paths.list }]} here={drive.roleTitle} />
-        <p className="lead cy-drive-sub">
-          <span>{drive.company.name}</span>
-          <DriveStatusChip status={drive.status} />
-        </p>
+      <header className="rq-head">
+        <div className="rq-head-text">
+          <p className="rq-crumb">
+            <Link to={paths.list}>Drives</Link>
+            <span aria-hidden="true">/</span>
+            <span>{drive.company.name}</span>
+          </p>
+          <h1 className="rq-title">{drive.roleTitle}</h1>
+          <p className="rq-meta">
+            <span>{drive.company.name}</span>
+            <span>{jobLabel(drive.jobType)}</span>
+            <span>{pay(drive)}</span>
+            {drive.location && <span>{drive.location}</span>}
+            <DriveStatusChip status={drive.status} />
+          </p>
+        </div>
       </header>
 
       {act.error && <Alert>{act.error}</Alert>}
       {done && <Saved>{done}</Saved>}
       <NextStep drive={drive} doing={doing} onDelete={() => void act.run(async () => (await drivesApi.remove(drive.id), navigate(paths.list)))} />
 
-      <nav className="tabs" aria-label="Drive sections">
-        <a href="?tab=overview" aria-current={tab === "overview" ? "page" : undefined} onClick={(e) => (e.preventDefault(), setParams({}))}>
+      <nav className="ui-tabs dd-tabs" aria-label="Drive sections">
+        <a className="ui-tab" href="?tab=overview" aria-current={tab === "overview" ? "page" : undefined} onClick={(e) => (e.preventDefault(), setParams({}))}>
           Overview
         </a>
-        <a href="?tab=students" aria-current={tab === "students" ? "page" : undefined} onClick={(e) => (e.preventDefault(), setParams({ tab: "students" }))}>
-          Students <span className="pill">{drive.counts.total}</span>
+        <a className="ui-tab" href="?tab=students" aria-current={tab === "students" ? "page" : undefined} onClick={(e) => (e.preventDefault(), setParams({ tab: "students" }))}>
+          Students <span className="ui-tab-count">{drive.counts.total}</span>
         </a>
         {["ONGOING", "RESULTS_DECLARED", "CLOSED"].includes(drive.status) && (
-          <a href="?tab=offers" aria-current={tab === "offers" ? "page" : undefined} onClick={(e) => (e.preventDefault(), setParams({ tab: "offers" }))}>
+          <a className="ui-tab" href="?tab=offers" aria-current={tab === "offers" ? "page" : undefined} onClick={(e) => (e.preventDefault(), setParams({ tab: "offers" }))}>
             Offers
           </a>
         )}
         {role === "TPO" && drive.status !== "DRAFT" && (
-          <a href="?tab=feedback" aria-current={tab === "feedback" ? "page" : undefined} onClick={(e) => (e.preventDefault(), setParams({ tab: "feedback" }))}>
+          <a className="ui-tab" href="?tab=feedback" aria-current={tab === "feedback" ? "page" : undefined} onClick={(e) => (e.preventDefault(), setParams({ tab: "feedback" }))}>
             Feedback to check
           </a>
         )}
@@ -85,7 +96,7 @@ export default function DriveDetail() {
   );
 }
 
-/** The one banner that says where the drive is and the next thing to do. */
+/** One quiet bar: where the drive is, the next thing to do, and the rarer actions behind "More". */
 function NextStep({ drive, doing, onDelete }: { drive: OfficeDrive; doing: (msg: string, fn: () => Promise<OfficeDrive | void>) => void; onDelete: () => void }) {
   const { role } = useAuth();
   const tpo = role === "TPO";
@@ -94,32 +105,47 @@ function NextStep({ drive, doing, onDelete }: { drive: OfficeDrive; doing: (msg:
   const [reason, setReason] = useState("");
   const reasonId = useId();
   const c = drive.can;
+  // How many students match the rules but aren't invited yet: the invite button shows only while there are some.
+  const [notInvited, setNotInvited] = useState<number | null>(null);
+  const canInvite = c.invite;
+  const invitedNow = drive.counts.total;
+  useEffect(() => {
+    if (!canInvite) return;
+    let gone = false;
+    drivesApi.preview(drive.id).then(
+      (r) => !gone && setNotInvited(r.students.filter((x) => !x.inDrive || x.inDrive === "REMOVED").length),
+      () => !gone && setNotInvited(null),
+    );
+    return () => {
+      gone = true;
+    };
+  }, [canInvite, drive.id, invitedNow]);
 
-  let family = "fam-azure";
+  let tone = "neutral";
   let title = "";
   let detail = "";
   if (drive.status === "DRAFT") {
-    family = "fam-sun";
+    tone = "warning";
     title = "Draft";
     detail = drive.missing.length ? `Still to add: ${drive.missing.join(", ").toLowerCase()}.` : tpo ? "Everything is filled in. Publish it when ready." : "Everything is filled in. Send it to the placement office.";
   } else if (drive.status === "REJECTED") {
-    family = "fam-ember";
+    tone = "danger";
     title = "Sent back by the placement office";
     detail = drive.rejectionReason ?? "";
   } else if (drive.status === "PENDING_APPROVAL") {
-    family = "fam-sun";
+    tone = "warning";
     title = tpo ? "Waiting for your approval" : "Waiting for the placement office";
     detail = tpo ? "Check the details, who can apply and the rounds below, then approve or send it back." : "The TPO is checking it. You'll be told when it's approved. Students see nothing yet.";
   } else if (drive.status === "PUBLISHED" || drive.status === "ONGOING") {
-    family = "fam-lime";
+    tone = "success";
     title = drive.counts.total ? `${drive.counts.joined} joined · ${drive.counts.invited} haven't answered` : "Approved. Invite eligible students.";
     detail = `${timeLeft(drive.optInDeadline)} to join (${when(drive.optInDeadline)}).`;
   } else if (drive.status === "CANCELLED") {
-    family = "fam-ember";
+    tone = "danger";
     title = "Cancelled";
     detail = drive.rejectionReason ?? "";
   } else if (drive.status === "RESULTS_DECLARED") {
-    family = "fam-orchid";
+    tone = "accent";
     title = "Final results are out";
     detail = tpo ? "Offers are being sent. Close the drive when it's done; HR then can't change anything." : "Send each selected student's offer letter from the Offers tab.";
   } else if (drive.status === "CLOSED") {
@@ -127,91 +153,124 @@ function NextStep({ drive, doing, onDelete }: { drive: OfficeDrive; doing: (msg:
     detail = "This drive is finished and kept for the placement history.";
   }
 
+  type Act = { label: string; to?: string; run?: () => void; danger?: boolean };
+  const main: Act[] = [];
+  const more: Act[] = [];
+  if (c.decide) {
+    main.push({ label: "Approve", run: () => doing("Approved. HR can now invite students.", () => drivesApi.approve(drive.id)) });
+    main.push({ label: "Send back…", run: () => setAsking("reject") });
+  }
+  if (c.submit && !drive.missing.length) main.push({ label: tpo ? "Review and publish" : "Review and send", to: paths.edit(drive.id, "review") });
+  if (c.invite && notInvited !== 0) main.push({ label: invitedNow && notInvited ? `Invite ${notInvited} more` : "Invite students", to: "?tab=students" });
+  if (drive.status === "RESULTS_DECLARED") main.push({ label: "Offers", to: "?tab=offers" });
+  if (c.edit || c.editRounds) (main.length ? more : main).push({ label: "Edit drive", to: paths.edit(drive.id) });
+  if (c.withdraw) more.push({ label: "Take back to edit", run: () => doing("Taken back. You can edit it again.", () => drivesApi.withdraw(drive.id)) });
+  if (tpo && drive.status === "RESULTS_DECLARED")
+    more.push({
+      label: "Close drive",
+      run: () => window.confirm("Close this drive? HR won't be able to send or change offers after this.") && doing("Drive closed.", async () => (await offersApi.closeDrive(drive.id), drivesApi.get(drive.id))),
+    });
+  if (c.delete) more.push({ label: "Delete draft", danger: true, run: () => window.confirm("Delete this draft? This can't be undone.") && onDelete() });
+  if (c.cancel && !["DRAFT", "REJECTED", "RESULTS_DECLARED"].includes(drive.status)) more.push({ label: "Cancel drive…", danger: true, run: () => setAsking("cancel") });
+
+  const button = (a: Act, i: number) =>
+    a.to ? (
+      <Link key={a.label} className={`button${i === 0 ? " primary" : ""}`} to={a.to}>
+        {a.label}
+      </Link>
+    ) : (
+      <button key={a.label} type="button" className={i === 0 ? "primary" : undefined} onClick={a.run}>
+        {a.label}
+      </button>
+    );
+
   return (
-    <div className={`banner ${family} cy-next`}>
-      <div className="banner-words">
-        <p className="banner-title">{title}</p>
-        {detail && <p className="banner-detail">{detail}</p>}
-        {asking && (
-          <div className="cy-reason">
-            <label htmlFor={reasonId}>{asking === "reject" ? "What should HR change?" : "Why is it cancelled? Students will see this."}</label>
-            <textarea id={reasonId} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
-            <div className="buttons">
-              <button
-                type="button"
-                className="banner-go"
-                onClick={() => {
-                  const r = reason;
-                  setAsking(null);
-                  setReason("");
-                  if (asking === "reject") doing("Sent back to HR with your note.", () => drivesApi.reject(drive.id, r));
-                  else doing("Drive cancelled. Students and HR have been told.", () => drivesApi.cancel(drive.id, r));
-                }}
-              >
-                {asking === "reject" ? "Send back" : "Cancel the drive"}
-              </button>
-              <button type="button" className="quiet" onClick={() => setAsking(null)}>
-                Never mind
-              </button>
-            </div>
-          </div>
-        )}
+    <section className={`ui-status tone-${tone}`} aria-label="Where this drive is">
+      <span className="ui-status-dot" aria-hidden="true" />
+      <div className="ui-status-text">
+        <p className="ui-status-title banner-title">{title}</p>
+        {detail && <p className="ui-status-body">{detail}</p>}
       </div>
-      {!asking && (
-        <div className="cy-next-actions">
-          {c.decide && (
-            <>
-              <button type="button" className="banner-go" onClick={() => doing("Approved. HR can now invite students.", () => drivesApi.approve(drive.id))}>
-                Approve
-              </button>
-              <button type="button" className="banner-go cy-go-quiet" onClick={() => setAsking("reject")}>
-                Send back…
-              </button>
-            </>
-          )}
-          {c.submit && !drive.missing.length && (
-            <Link className="banner-go" to={paths.edit(drive.id, "review")}>
-              {tpo ? "Review and publish" : "Review and send"}
-            </Link>
-          )}
-          {(c.edit || c.editRounds) && (
-            <Link className="banner-go cy-go-quiet" to={paths.edit(drive.id)}>
-              Edit
-            </Link>
-          )}
-          {c.withdraw && (
-            <button type="button" className="banner-go cy-go-quiet" onClick={() => doing("Taken back. You can edit it again.", () => drivesApi.withdraw(drive.id))}>
-              Take back to edit
-            </button>
-          )}
-          {c.invite && (
-            <Link className="banner-go" to="?tab=students">
-              Invite students
-            </Link>
-          )}
-          {c.delete && (
-            <button type="button" className="banner-go cy-go-quiet" onClick={() => window.confirm("Delete this draft? This can't be undone.") && onDelete()}>
-              Delete draft
-            </button>
-          )}
-          {drive.status === "RESULTS_DECLARED" && (
-            <Link className="banner-go" to="?tab=offers">
-              Offers
-            </Link>
-          )}
-          {tpo && drive.status === "RESULTS_DECLARED" && (
+      {!asking && (main.length > 0 || more.length > 0) && (
+        <div className="ui-status-actions">
+          {main.map(button)}
+          {more.length > 0 && <MoreMenu items={more} />}
+        </div>
+      )}
+      {asking && (
+        <div className="ui-status-ask">
+          <label htmlFor={reasonId}>{asking === "reject" ? "What should HR change?" : "Why is it cancelled? Students will see this."}</label>
+          <textarea id={reasonId} rows={2} value={reason} autoFocus onChange={(e) => setReason(e.target.value)} />
+          <div className="buttons">
             <button
               type="button"
-              className="banner-go cy-go-quiet"
-              onClick={() => window.confirm("Close this drive? HR won't be able to send or change offers after this.") && doing("Drive closed.", async () => (await offersApi.closeDrive(drive.id), drivesApi.get(drive.id)))}
+              className="primary"
+              disabled={!reason.trim()}
+              onClick={() => {
+                const r = reason;
+                setAsking(null);
+                setReason("");
+                if (asking === "reject") doing("Sent back to HR with your note.", () => drivesApi.reject(drive.id, r));
+                else doing("Drive cancelled. Students and HR have been told.", () => drivesApi.cancel(drive.id, r));
+              }}
             >
-              Close drive
+              {asking === "reject" ? "Send back" : "Cancel the drive"}
             </button>
-          )}
-          {c.cancel && drive.status !== "DRAFT" && drive.status !== "REJECTED" && drive.status !== "RESULTS_DECLARED" && (
-            <button type="button" className="banner-go cy-go-quiet" onClick={() => setAsking("cancel")}>
-              Cancel drive…
+            <button type="button" onClick={() => setAsking(null)}>
+              Never mind
             </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** The less common actions, behind one "More" button, so the bar holds one or two buttons at most. */
+function MoreMenu({ items }: { items: { label: string; to?: string; run?: () => void; danger?: boolean }[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("pointerdown", away);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+  return (
+    <div className="ui-more" ref={ref}>
+      <button type="button" className="ui-more-toggle" aria-expanded={open} aria-haspopup="menu" aria-label="More actions" onClick={() => setOpen((o) => !o)}>
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+          <circle cx="3.5" cy="8" r="1.4" fill="currentColor" />
+          <circle cx="8" cy="8" r="1.4" fill="currentColor" />
+          <circle cx="12.5" cy="8" r="1.4" fill="currentColor" />
+        </svg>
+      </button>
+      {open && (
+        <div className="ui-more-menu" role="menu">
+          {items.map((a) =>
+            a.to ? (
+              <Link key={a.label} role="menuitem" className={`ui-more-item${a.danger ? " is-danger" : ""}`} to={a.to} onClick={() => setOpen(false)}>
+                {a.label}
+              </Link>
+            ) : (
+              <button
+                key={a.label}
+                type="button"
+                role="menuitem"
+                className={`ui-more-item${a.danger ? " is-danger" : ""}`}
+                onClick={() => {
+                  setOpen(false);
+                  a.run?.();
+                }}
+              >
+                {a.label}
+              </button>
+            ),
           )}
         </div>
       )}
@@ -223,32 +282,57 @@ function Overview({ drive }: { drive: OfficeDrive }) {
   const { role } = useAuth();
   const paths = drivePaths(role);
   const live = ["PUBLISHED", "ONGOING", "RESULTS_DECLARED", "CLOSED"].includes(drive.status);
+  const c = drive.counts;
   return (
-    <div className="cy-two">
-      <section>
-        <div className="section-head">
-          <h2>Rounds</h2>
-        </div>
-        <RoundTimeline rounds={drive.rounds} linkTo={live ? (rid) => paths.round(drive.id, rid) : undefined} />
-        {live && <p className="faint small">Open a round to start it, run check-in and enter results.</p>}
-      </section>
-      <section className="stack">
-        <div className="panel stack">
-          <h2 className="cy-h3">Job</h2>
-          <dl className="cy-facts">
+    <div className="ui-split rq-split">
+      <div className="rq-main">
+        <section className="rq-card">
+          <div className="rq-card-head dd-card-head">
+            <div>
+              <h2>Rounds</h2>
+              <p>{live ? "Open a round to start it, run check-in and enter results." : "Rounds open once the drive is approved."}</p>
+            </div>
+            {(drive.can.edit || drive.can.editRounds) && (
+              <Link className="button small" to={paths.edit(drive.id, "rounds")}>
+                Edit rounds
+              </Link>
+            )}
+          </div>
+          <div className="sd-rounds">
+            <RoundTimeline rounds={drive.rounds} linkTo={live ? (rid) => paths.round(drive.id, rid) : undefined} />
+          </div>
+        </section>
+        {drive.description && (
+          <section className="rq-card">
+            <div className="rq-card-head">
+              <h2>About the job</h2>
+            </div>
+            <p className="sd-desc">{drive.description}</p>
+          </section>
+        )}
+      </div>
+      <div className="rq-side">
+        <Aside title="Students">
+          <div className="ui-stats">
+            <Stat label="Invited" value={c.total} />
+            <Stat label="Joined" value={c.joined} />
+            <Stat label="Still to answer" value={c.invited} />
+            <Stat label="Skipped or out" value={Math.max(0, c.total - c.joined - c.invited)} />
+          </div>
+        </Aside>
+        <Aside title="The job">
+          <dl className="sh-facts sd-facts">
             <div><dt>Type</dt><dd>{jobLabel(drive.jobType)}</dd></div>
             <div><dt>Pay</dt><dd>{pay(drive)}</dd></div>
-            <div><dt>Location</dt><dd>{drive.location ?? "—"}</dd></div>
+            <div><dt>Location</dt><dd>{drive.location ?? "Not given"}</dd></div>
             <div><dt>Bond</dt><dd>{drive.bondMonths ? `${drive.bondMonths} months` : "None"}</dd></div>
-            <div><dt>Join by</dt><dd>{drive.optInDeadline ? when(drive.optInDeadline) : "—"}</dd></div>
+            <div><dt>Join by</dt><dd>{drive.optInDeadline ? when(drive.optInDeadline) : "Not set"}</dd></div>
           </dl>
-          {drive.description && <p className="small cy-pre">{drive.description}</p>}
-        </div>
-        <div className="panel stack">
-          <h2 className="cy-h3">Who can apply</h2>
-          <ul className="cy-list small">{eligibilityLines(drive.eligibility).map((l) => <li key={l}>{l}</li>)}</ul>
-        </div>
-      </section>
+        </Aside>
+        <Aside title="Who can apply">
+          <ul className="rq-rules">{eligibilityLines(drive.eligibility).map((l) => <li key={l}>{l}</li>)}</ul>
+        </Aside>
+      </div>
     </div>
   );
 }
@@ -284,18 +368,19 @@ function Students({ drive, onChange }: { drive: OfficeDrive; onChange: () => voi
     });
 
   return (
-    <div className="stack">
+    <div className="rq-main">
       {form.error && <Alert>{form.error}</Alert>}
       {msg && <Saved>{msg}</Saved>}
 
-      <section>
-        <div className="section-head">
+      <section className="rq-card">
+        <div className="rq-card-head">
           <h2>In this drive</h2>
+          <p>Everyone invited, and their answer. Contact details unlock when a student joins.</p>
         </div>
-        {people && !people.length && <p className="faint">No one invited yet.</p>}
+        {people && !people.length && <p className="rq-empty">No one invited yet.</p>}
         {people && people.length > 0 && (
           <div className="scroll">
-            <table className="cy-table">
+            <table className="cy-table dd-table">
               <thead>
                 <tr>
                   <th scope="col">Student</th>
@@ -309,9 +394,8 @@ function Students({ drive, onChange }: { drive: OfficeDrive; onChange: () => voi
                 {people.map((p) => (
                   <tr key={p.id}>
                     <td>
-                      {p.name}
-                      <br />
-                      <span className="faint small">{p.rollNo}</span>
+                      <span className="dd-name">{p.name}</span>
+                      <span className="dd-roll">{p.rollNo}</span>
                     </td>
                     <td>
                       {p.branch} {p.batch}
@@ -322,7 +406,7 @@ function Students({ drive, onChange }: { drive: OfficeDrive; onChange: () => voi
                     </td>
                     <td>
                       {p.status === "INVITED" && drive.can.invite && (
-                        <button type="button" className="quiet" onClick={() => void run(async () => (await drivesApi.uninvite(id, p.id), load(), onChange()))}>
+                        <button type="button" className="small" onClick={() => void run(async () => (await drivesApi.uninvite(id, p.id), load(), onChange()))}>
                           Take back
                         </button>
                       )}
@@ -335,33 +419,37 @@ function Students({ drive, onChange }: { drive: OfficeDrive; onChange: () => voi
         )}
       </section>
 
-      <section>
-        <div className="section-head">
-          <h2>Eligible, not invited yet</h2>
-          {eligible && <span className="pill">{notYet.length}</span>}
+      <section className="rq-card">
+        <div className="rq-card-head dd-card-head">
+          <div>
+            <h2>
+              Eligible, not invited yet {eligible && <span className="ui-tab-count">{notYet.length}</span>}
+            </h2>
+            <p>Verified students who match the drive's rules.</p>
+          </div>
+          {drive.can.invite && notYet.length > 0 && (
+            <div className="dd-invite">
+              <button type="button" disabled={form.busy || !picked.length} onClick={() => invite({ studentIds: picked })}>
+                Invite {picked.length || ""} picked
+              </button>
+              <button type="button" className="primary" disabled={form.busy} onClick={() => invite({ all: true })}>
+                Invite all {notYet.length} eligible
+              </button>
+            </div>
+          )}
         </div>
         {!drive.can.invite && (
-          <p className="faint">
+          <p className="rq-empty">
             {drive.status === "DRAFT" || drive.status === "REJECTED" || drive.status === "PENDING_APPROVAL"
               ? "You can invite students once the placement office approves the drive. This is who matches right now."
               : "This drive is no longer taking students."}
           </p>
         )}
-        {eligible && !notYet.length && <p className="faint">Everyone who matches is already invited.</p>}
+        {eligible && !notYet.length && <p className="rq-empty">Everyone who matches is already invited.</p>}
         {notYet.length > 0 && (
           <>
-            {drive.can.invite && (
-              <div className="buttons cy-invite-bar">
-                <button type="button" className="primary" disabled={form.busy} onClick={() => invite({ all: true })}>
-                  Invite all {notYet.length} eligible
-                </button>
-                <button type="button" disabled={form.busy || !picked.length} onClick={() => invite({ studentIds: picked })}>
-                  Invite {picked.length || ""} picked
-                </button>
-              </div>
-            )}
             <div className="scroll">
-              <table className="cy-table">
+              <table className="cy-table dd-table">
                 <thead>
                   <tr>
                     {drive.can.invite && <th scope="col"><span className="hidden">Pick</span></th>}
@@ -385,9 +473,8 @@ function Students({ drive, onChange }: { drive: OfficeDrive; onChange: () => voi
                         </td>
                       )}
                       <td>
-                        {s.name}
-                        <br />
-                        <span className="faint small">{s.rollNo}</span>
+                        <span className="dd-name">{s.name}</span>
+                        <span className="dd-roll">{s.rollNo}</span>
                       </td>
                       <td>
                         {s.branch} {s.batch}
@@ -399,7 +486,7 @@ function Students({ drive, onChange }: { drive: OfficeDrive; onChange: () => voi
                 </tbody>
               </table>
             </div>
-            <p className="faint small">Only verified students who match the drive's rules are listed. Contact details are shared with the company only after a student joins.</p>
+            <p className="dd-foot">Only verified students who match the drive's rules are listed. Contact details are shared with the company only after a student joins.</p>
           </>
         )}
       </section>

@@ -84,7 +84,6 @@ export default function VerifyEmail() {
         )
       }
       sprite="ask"
-      family="azure"
     >
       {form.error && <Alert>{form.error}</Alert>}
       {resent && !form.error && <p className="alert alert-done" role="status">A new code is on its way.</p>}
@@ -94,6 +93,7 @@ export default function VerifyEmail() {
             label="Email"
             type="email"
             autoComplete="email"
+            placeholder="name@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             error={form.fieldErrors.email}
@@ -106,12 +106,13 @@ export default function VerifyEmail() {
           autoComplete="one-time-code"
           pattern="\d{6}"
           maxLength={6}
+          placeholder="123456"
           value={code}
           onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
           error={form.fieldErrors.code}
           autoFocus
         />
-        <button className="primary button-wide" type="submit" disabled={form.busy || code.length !== 6}>
+        <button className="primary button-wide" type="submit" disabled={form.busy || code.length !== 6} aria-busy={form.busy}>
           {form.busy ? "Checking…" : "Confirm email"}
         </button>
       </form>

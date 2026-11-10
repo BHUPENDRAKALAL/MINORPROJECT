@@ -181,6 +181,8 @@ model FileObject {
   /// SHA-256 of the content: finds the same file uploaded by two students
   sha256       String
   scanStatus   ScanStatus @default(PENDING)
+  /// Why the file was refused (shown to the uploader), or what the sanitizer removed
+  scanNote     String?
   createdAt    DateTime   @default(now())
 
   owner User? @relation(fields: [ownerId], references: [id], onDelete: SetNull)

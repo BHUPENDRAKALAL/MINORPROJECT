@@ -28,6 +28,24 @@ export interface NavItem {
   only?: Role[];
   /** Pages under this path also mark the item current (for an item whose own path is the area's home). */
   under?: string;
+  /** Heading of the side-panel group the item sits in. Items without one sit in the top group, unlabelled. */
+  group?: string;
+}
+
+export interface NavGroup {
+  label?: string;
+  items: NavItem[];
+}
+
+/** Splits a role's items into the side panel's groups, keeping their order (items of a group stay together). */
+export function groupNav(items: NavItem[]): NavGroup[] {
+  const groups: NavGroup[] = [];
+  for (const item of items) {
+    const last = groups.at(-1);
+    if (last && last.label === item.group) last.items.push(item);
+    else groups.push({ label: item.group, items: [item] });
+  }
+  return groups;
 }
 
 /** The nav item is current on its own page and on the pages under it (a drive under Drives). */
@@ -51,19 +69,19 @@ export const STUDENT_AREA: NavArea = {
   items: [
     { key: "home", to: "/student", label: "Home", icon: "overview", family: "lime" },
     {
-      key: "profile", to: "/student/profile", label: "My profile", icon: "brief", family: "sun",
-      empty: "Your academic details, documents and resume will be here. Once you fill them in, the placement office checks them and marks your profile verified.",
-      sprite: "apprentice",
+      key: "notifications", to: "/student/notifications", label: "Notifications", icon: "needs", family: "sun",
+      empty: "Shortlists, round results, interview calls and messages from the placement office will show up here. Nothing new yet.",
+      sprite: "smith",
     },
     {
-      key: "drives", to: "/student/drives", label: "Drives", icon: "jobs", family: "azure",
+      key: "drives", to: "/student/drives", label: "Drives", icon: "jobs", family: "azure", group: "Placements",
       empty: "Placement drives you are eligible for will be listed here, with dates, rounds and a button to opt in or out.",
       sprite: "designer",
     },
     {
-      key: "notifications", to: "/student/notifications", label: "Notifications", icon: "needs", family: "sun",
-      empty: "Shortlists, round results, interview calls and messages from the placement office will show up here. Nothing new yet.",
-      sprite: "smith",
+      key: "profile", to: "/student/profile", label: "My profile", icon: "brief", family: "sun", group: "Placements",
+      empty: "Your academic details, documents and resume will be here. Once you fill them in, the placement office checks them and marks your profile verified.",
+      sprite: "apprentice",
     },
   ],
 };
@@ -77,34 +95,34 @@ export const OFFICE_AREA: NavArea = {
       empty: "Today's numbers will be here: profiles waiting for review, drives running, students placed this season.",
       sprite: "smith",
     },
+    { key: "notifications", to: "/office/notifications", label: "Notifications", icon: "needs", family: "sun" },
     {
-      key: "review", to: "/office/review", label: "Review queue", icon: "responses", family: "orchid",
+      key: "review", to: "/office/review", label: "Review queue", icon: "responses", family: "orchid", group: "Students",
       empty: "Student profiles and change requests waiting for a check will line up here, oldest first.",
       sprite: "reviewer",
     },
     {
-      key: "students", to: "/office/students", label: "Students", icon: "data", family: "azure",
+      key: "students", to: "/office/students", label: "Students", icon: "data", family: "azure", group: "Students",
       empty: "Every registered student, with their branch, batch, verification and placement status, and filters to find them.",
       sprite: "apprentice",
     },
     {
-      key: "companies", to: "/office/companies", label: "Companies", icon: "connections", family: "azure",
+      key: "drives", to: "/office/drives", label: "Drives", icon: "jobs", family: "lime", group: "Placements", only: ["TPO"],
+      empty: "Placement drives from draft to results: eligibility, shortlists, rounds and offers.",
+      sprite: "smith",
+    },
+    {
+      key: "companies", to: "/office/companies", label: "Companies", icon: "connections", family: "azure", group: "Placements",
       empty: "Companies that have registered or been invited, and the ones waiting for your approval.",
       sprite: "designer",
     },
     {
-      key: "drives", to: "/office/drives", label: "Drives", icon: "jobs", family: "lime", only: ["TPO"],
-      empty: "Placement drives from draft to results: eligibility, shortlists, rounds and offers.",
-      sprite: "smith",
-    },
-    { key: "notifications", to: "/office/notifications", label: "Notifications", icon: "needs", family: "sun" },
-    {
-      key: "team", to: "/office/team", label: "Team", icon: "activity", family: "sun", only: ["TPO"],
+      key: "team", to: "/office/team", label: "Team", icon: "activity", family: "sun", group: "Administration", only: ["TPO"],
       empty: "Your placement staff and volunteers, what each of them may do, and invites you have sent.",
       sprite: "ask",
     },
     {
-      key: "settings", to: "/office/settings", label: "Settings", icon: "settings", family: "none", only: ["TPO"],
+      key: "settings", to: "/office/settings", label: "Settings", icon: "settings", family: "none", group: "Administration", only: ["TPO"],
       empty: "Season settings, eligibility defaults and email templates will be managed here.",
       sprite: "apprentice",
     },
@@ -119,12 +137,12 @@ export const COMPANY_AREA: NavArea = {
     { key: "drives", to: "/company", label: "Drives", icon: "jobs", family: "azure", under: "/company/drives" },
     { key: "notifications", to: "/company/notifications", label: "Notifications", icon: "needs", family: "sun" },
     {
-      key: "team", to: "/company/team", label: "Team", icon: "activity", family: "sun",
+      key: "team", to: "/company/team", label: "Team", icon: "activity", family: "sun", group: "Company",
       empty: "Colleagues and interviewers you invite will be listed here.",
       sprite: "ask",
     },
     {
-      key: "profile", to: "/company/profile", label: "Company profile", icon: "brief", family: "orchid",
+      key: "profile", to: "/company/profile", label: "Company profile", icon: "brief", family: "orchid", group: "Company",
       title: "Company profile",
       empty: "Your company's details as students will see them: about, website, locations and the people to contact.",
       sprite: "reviewer",

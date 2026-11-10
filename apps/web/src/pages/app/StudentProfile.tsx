@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNod
 import { DOCUMENT_LABELS, REJECT_REASONS, type RejectReason } from "@cyrus/shared";
 import { Field, SelectField } from "../../components/form";
 import { useApiForm } from "../../components/useApiForm";
-import { Alert, EmptyState, Saved, Sprite } from "../../components/ui";
+import { Aside, Callout, type Tone } from "../../components/kit";
+import { Alert, EmptyState, Saved } from "../../components/ui";
 import { useAuth } from "../../app/useAuth";
 import {
   ApiError,
@@ -16,57 +17,36 @@ import { useTitle } from "../../lib/useTitle";
 
 const SEMESTERS = [1, 2, 3, 4, 5, 6, 7, 8];
 
-/** The status strip at the top: where the profile is and what happens next. */
+/** The status bar at the top: where the profile is and what happens next. */
 function StatusBanner({ view, onWithdraw, busy }: { view: StudentProfileView; onWithdraw: () => void; busy: boolean }) {
   const s = view.profile.status;
-  if (s === "PENDING_VERIFICATION") {
-    return (
-      <div className="banner fam-orchid" role="status">
-        <div className="banner-words">
-          <p className="banner-title">Your profile is being checked</p>
-          <p className="banner-detail">
-            The placement office is checking your marks against your documents. It usually takes 2–3 days. You'll get a notification and an email when it's done.
-          </p>
-        </div>
-        {view.canWithdraw && (
-          <button type="button" className="banner-go" onClick={onWithdraw} disabled={busy}>
+  const [tone, title, body]: [Tone, string, string] =
+    s === "PENDING_VERIFICATION"
+      ? ["info", "Your profile is being checked", "The placement office is matching your marks with your marksheets. It usually takes 2–3 days. You'll get a notification and an email when it's done."]
+      : s === "VERIFIED"
+        ? ["success", "Your profile is verified", "Your marks are locked, and you can be picked for drives you're eligible for. After a new semester, send a change request under Marks."]
+        : s === "REJECTED"
+          ? ["danger", "Your profile needs changes", "Fix what's asked below, then send it again."]
+          : ["warning", "Complete your profile", "Add your marks and upload your marksheets, then send it for verification so you can take part in drives."];
+  return (
+    <section className={`ui-status tone-${tone}`} role="status">
+      <span className="ui-status-dot" aria-hidden="true" />
+      <div className="ui-status-text">
+        <p className="ui-status-title banner-title">{title}</p>
+        <p className="ui-status-body">{body}</p>
+      </div>
+      {s === "PENDING_VERIFICATION" && view.canWithdraw && (
+        <div className="ui-status-actions">
+          <button type="button" onClick={onWithdraw} disabled={busy}>
             Withdraw to make changes
           </button>
-        )}
-      </div>
-    );
-  }
-  if (s === "VERIFIED") {
-    return (
-      <div className="banner fam-lime" role="status">
-        <div className="banner-words">
-          <p className="banner-title">Your profile is verified</p>
-          <p className="banner-detail">Your marks are locked. You can be picked for drives you're eligible for. To change marks after a new semester, send a change request below.</p>
         </div>
-      </div>
-    );
-  }
-  if (s === "REJECTED") {
-    return (
-      <div className="banner fam-ember" role="status">
-        <div className="banner-words">
-          <p className="banner-title">Your profile needs changes</p>
-          <p className="banner-detail">Fix what's listed below and send it again.</p>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="banner fam-sun" role="status">
-      <div className="banner-words">
-        <p className="banner-title">Complete your profile</p>
-        <p className="banner-detail">Add your marks and upload your marksheets. Then send it for verification so you can take part in drives.</p>
-      </div>
-    </div>
+      )}
+    </section>
   );
 }
 
-/** Submitted → In review → Verified, as three stages. */
+/** Fill → Send → Checked → Verified, as a step bar. */
 function Timeline({ view }: { view: StudentProfileView }) {
   const s = view.profile.status;
   const submitted = s !== "PROFILE_INCOMPLETE";
@@ -76,25 +56,39 @@ function Timeline({ view }: { view: StudentProfileView }) {
     { label: s === "REJECTED" ? "Changes asked" : "Being checked", state: s === "PENDING_VERIFICATION" ? "working" : s === "REJECTED" ? "stuck" : s === "VERIFIED" ? "done" : "idle" },
     { label: "Verified", state: s === "VERIFIED" ? "done" : "idle" },
   ];
+  // The step to show by name on a phone, where only the marks fit: the first one not done (or the last).
+  const open = steps.findIndex((x) => x.state !== "done");
+  const current = open === -1 ? steps.length - 1 : open;
   return (
-    <ol className="cy-timeline" aria-label="Verification progress">
-      {steps.map((st) => (
-        <li key={st.label}>
-          <span className={`stage ${st.state}`}>{st.label}</span>
+    <ol className="cy-timeline sp-steps" aria-label="Verification progress">
+      {steps.map((st, i) => (
+        <li key={st.label} className={`is-${st.state}${i === current ? " is-current" : ""}`}>
+          <span className="sp-step-mark" aria-hidden="true">
+            {st.state === "done" ? (
+              <svg viewBox="0 0 16 16" width="12" height="12">
+                <path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            ) : st.state === "stuck" ? (
+              "!"
+            ) : (
+              i + 1
+            )}
+          </span>
+          <span className={`stage is-bare ${st.state}`}>{st.label}</span>
         </li>
       ))}
     </ol>
   );
 }
 
-function Section({ title, note, children }: { title: string; note?: ReactNode; children: ReactNode }) {
+function Section({ title, note, children, id }: { title: string; note?: ReactNode; children: ReactNode; id?: string }) {
   return (
-    <section className="cy-section">
-      <div className="section-head">
+    <section className="rq-card sp-card" id={id}>
+      <div className="rq-card-head">
         <h2>{title}</h2>
+        {note && <p>{note}</p>}
       </div>
-      {note && <p className="section-note">{note}</p>}
-      {children}
+      <div className="sp-card-body">{children}</div>
     </section>
   );
 }
@@ -154,12 +148,12 @@ function MarksForm({
   }
 
   return (
-    <form className="stack panel cy-wide" onSubmit={submit} noValidate>
+    <form className="form" onSubmit={submit} noValidate>
       {saved && <Saved>Saved.</Saved>}
       {form.error && form.errorCode !== "VALIDATION_FAILED" && form.errorCode !== "LOCAL_VALIDATION" && <Alert>{form.error}</Alert>}
-      <div className="cy-grid">
-        <Field label="CGPA (out of 10)" inputMode="decimal" value={v.cgpa} onChange={set("cgpa")} error={form.fieldErrors.cgpa} disabled={disabled} />
-        <SelectField label="Up to semester" value={v.semester} onChange={set("semester")} error={form.fieldErrors.semester} disabled={disabled}>
+      <div className="form-row">
+        <Field label="CGPA" size="sm" inputMode="decimal" placeholder="e.g. 8.25" hint="Out of 10" value={v.cgpa} onChange={set("cgpa")} error={form.fieldErrors.cgpa} disabled={disabled} />
+        <SelectField label="Up to semester" size="sm" value={v.semester} onChange={set("semester")} error={form.fieldErrors.semester} disabled={disabled}>
           <option value="">Choose</option>
           {SEMESTERS.map((n) => (
             <option key={n} value={n}>
@@ -167,13 +161,17 @@ function MarksForm({
             </option>
           ))}
         </SelectField>
-        <Field label="Active backlogs" inputMode="numeric" value={v.activeBacklogs} onChange={set("activeBacklogs")} error={form.fieldErrors.activeBacklogs} disabled={disabled} />
-        <Field label="Total backlogs (ever)" inputMode="numeric" value={v.totalBacklogs} onChange={set("totalBacklogs")} error={form.fieldErrors.totalBacklogs} disabled={disabled} />
-        <Field label="Class 10 percentage" inputMode="decimal" value={v.tenthPercent} onChange={set("tenthPercent")} error={form.fieldErrors.tenthPercent} disabled={disabled} />
-        <Field label="Class 12 percentage" inputMode="decimal" value={v.twelfthPercent} onChange={set("twelfthPercent")} error={form.fieldErrors.twelfthPercent} hint="Leave empty if you did a diploma." disabled={disabled} />
-        <Field label="Diploma percentage" inputMode="decimal" value={v.diplomaPercent} onChange={set("diplomaPercent")} error={form.fieldErrors.diplomaPercent} hint="Only for lateral entry." disabled={disabled} />
       </div>
-      {withNote && <Field label="Why the change (optional)" value={v.note} onChange={set("note")} hint="For example: semester 6 results are out." />}
+      <div className="form-row">
+        <Field label="Active backlogs" size="sm" inputMode="numeric" placeholder="0" value={v.activeBacklogs} onChange={set("activeBacklogs")} error={form.fieldErrors.activeBacklogs} disabled={disabled} />
+        <Field label="Total backlogs" size="sm" inputMode="numeric" placeholder="0" hint="Including cleared ones" value={v.totalBacklogs} onChange={set("totalBacklogs")} error={form.fieldErrors.totalBacklogs} disabled={disabled} />
+      </div>
+      <div className="form-row">
+        <Field label="Class 10" size="sm" inputMode="decimal" placeholder="e.g. 88.4" hint="Percentage" value={v.tenthPercent} onChange={set("tenthPercent")} error={form.fieldErrors.tenthPercent} disabled={disabled} />
+        <Field label="Class 12" size="sm" optional inputMode="decimal" placeholder="e.g. 82" hint="Empty if you did a diploma" value={v.twelfthPercent} onChange={set("twelfthPercent")} error={form.fieldErrors.twelfthPercent} disabled={disabled} />
+        <Field label="Diploma" size="sm" optional inputMode="decimal" placeholder="e.g. 76" hint="Only for lateral entry" value={v.diplomaPercent} onChange={set("diplomaPercent")} error={form.fieldErrors.diplomaPercent} disabled={disabled} />
+      </div>
+      {withNote && <Field label="Why the change" optional size="lg" value={v.note} onChange={set("note")} placeholder="e.g. Semester 6 results are out" />}
       {!disabled && (
         <div className="buttons">
           <button className="primary" type="submit" disabled={form.busy}>
@@ -209,7 +207,7 @@ function DocRow({
     : doc.status === "ACCEPTED"
       ? { cls: "done", text: "Accepted" }
       : doc.file.scanStatus === "INFECTED"
-        ? { cls: "stuck", text: "Blocked: upload again" }
+        ? { cls: "stuck", text: "Not accepted: upload again" }
         : doc.file.scanStatus === "PENDING"
           ? { cls: "working", text: "Checking file" }
           : { cls: "done", text: "Uploaded" };
@@ -239,28 +237,35 @@ function DocRow({
   }
 
   return (
-    <li className="cy-doc">
+    <li className={`cy-doc sp-doc${doc ? "" : " is-empty"}`}>
+      <span className="rq-doc-icon" aria-hidden="true">
+        <svg viewBox="0 0 16 16" width="16" height="16">
+          <path d="M4 1.5h5.5L12.5 4.5v10h-8.5z" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+          <path d="M9.5 1.5v3h3" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+        </svg>
+      </span>
       <div className="cy-doc-main">
         <span className="cy-doc-label">{label}</span>
-        {doc ? <span className="cy-doc-file">{doc.file.originalName}</span> : <span className="faint small">PDF, PNG or JPG</span>}
+        {doc ? <span className="cy-doc-file">{doc.file.originalName}</span> : <span className="cy-doc-file">PDF, PNG or JPG, up to 10 MB</span>}
+        {doc?.file.scanStatus === "INFECTED" && doc.file.scanNote && <span className="field-error">{doc.file.scanNote}</span>}
         {err && <span className="field-error">{err}</span>}
       </div>
       {extra}
       {(doc || !extra) && <span className={`stage ${state.cls}`}>{state.text}</span>}
       <div className="cy-doc-actions">
-        {doc && (
-          <button type="button" className="quiet" onClick={() => void open()}>
+        {doc && doc.file.scanStatus !== "INFECTED" && (
+          <button type="button" className="small" onClick={() => void open()}>
             View
           </button>
         )}
         {canEdit && (
           <>
             <input ref={input} type="file" accept="application/pdf,image/png,image/jpeg" hidden onChange={(e) => void pick(e.target.files?.[0])} />
-            <button type="button" onClick={() => input.current?.click()} disabled={busy}>
+            <button type="button" className={`small${doc ? "" : " primary"}`} onClick={() => input.current?.click()} disabled={busy}>
               {busy ? "Uploading…" : doc ? "Replace" : "Upload"}
             </button>
             {doc && onRemove && (
-              <button type="button" className="quiet" onClick={() => void onRemove()}>
+              <button type="button" className="small sp-remove" onClick={() => void onRemove()} aria-label={`Remove ${label}`}>
                 Remove
               </button>
             )}
@@ -313,9 +318,9 @@ export default function StudentProfile() {
       .catch((e) => setLoadError(e instanceof ApiError ? e.message : "Couldn't load your profile."));
   }, [apply]);
 
-  // While a file is being virus-checked, look again every few seconds.
+  // While a file is being cleaned (rebuilt) by the worker, look again every few seconds.
   useEffect(() => {
-    if (!view?.documents.some((x) => x.file.scanStatus === "PENDING")) return;
+    if (!view?.documents.some((x) => x.file.scanStatus === "PENDING" || x.file.scanStatus === "FAILED")) return;
     const t = setTimeout(() => void refreshQuietly().catch(() => undefined), 3000);
     return () => clearTimeout(t);
   }, [view, refreshQuietly]);
@@ -324,7 +329,6 @@ export default function StudentProfile() {
   if (!view) {
     return (
       <div className="loading" role="status">
-        <Sprite name="smith" size={96} plays />
         <p className="faint">Opening your profile…</p>
       </div>
     );
@@ -348,33 +352,66 @@ export default function StudentProfile() {
   const rejection = view.rejection;
   const reason = rejection?.reasonCode && rejection.reasonCode in REJECT_REASONS ? REJECT_REASONS[rejection.reasonCode as RejectReason] : null;
 
+  const sendBlock = view.canEdit && (
+    <section className="rq-decide sp-send" aria-label="Send for verification">
+      <h2>Send for verification</h2>
+      {view.missing.length ? (
+        <>
+          <p className="rq-decide-help">Still missing:</p>
+          <ul className="cy-missing sp-missing">
+            {view.missing.map((m) => (
+              <li key={m}>{m}</li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <p className="rq-decide-help">Everything is in. Check your marks once more, then send it. You can't change marks while it's being checked.</p>
+      )}
+      <button
+        type="button"
+        className="primary rq-wide"
+        disabled={!!view.missing.length || action.busy}
+        onClick={() => void action.run(async () => after(studentApi.submit()))}
+      >
+        {action.busy ? "Sending…" : p.status === "REJECTED" ? "Send again for verification" : "Send for verification"}
+      </button>
+    </section>
+  );
+
   return (
     <>
-      <header className="page-head">
-        <h1 className="title">My profile</h1>
+      <header className="rq-head">
+        <div className="rq-head-text">
+          <h1 className="rq-title">My profile</h1>
+          <p className="rq-meta">
+            <span>{p.rollNo}</span>
+            <span>{p.branch}</span>
+            <span>Batch {p.batch}</span>
+            <span>{p.email}</span>
+          </p>
+        </div>
       </header>
 
+      <Timeline view={view} />
       <StatusBanner view={view} busy={action.busy} onWithdraw={() => void action.run(async () => after(studentApi.withdraw()))} />
       {action.error && <Alert>{action.error}</Alert>}
-      <Timeline view={view} />
 
       {p.status === "REJECTED" && (
-        <div className="alert cy-reject" role="alert">
-          <span>
-            <strong>{reason?.label ?? "Your profile needs changes"}.</strong> {reason?.hint}
-            {rejection?.note && (
-              <>
-                <br />
-                <span className="faint">Reviewer's note:</span> {rejection.note}
-              </>
-            )}
-          </span>
-        </div>
+        <Callout tone="danger" title={reason?.label ?? "Your profile needs changes"}>
+          {reason?.hint}
+          {rejection?.note && (
+            <>
+              {" "}Reviewer's note: “{rejection.note}”
+            </>
+          )}
+        </Callout>
       )}
 
-      <Section title="Your details" note="You can change these any time.">
+      <div className="ui-split rq-split">
+      <div className="rq-main">
+      <Section title="Your details" note="You can change these any time. Roll number, branch and batch come from sign-up; ask the placement office to fix them.">
         <form
-          className="stack panel cy-wide"
+          className="form"
           noValidate
           onSubmit={(e) => {
             e.preventDefault();
@@ -392,29 +429,11 @@ export default function StudentProfile() {
           }}
         >
           {detailsSaved && <Saved>Saved.</Saved>}
-          <dl className="cy-facts">
-            <div>
-              <dt>Roll number</dt>
-              <dd>{p.rollNo}</dd>
-            </div>
-            <div>
-              <dt>Branch</dt>
-              <dd>{p.branch}</dd>
-            </div>
-            <div>
-              <dt>Batch</dt>
-              <dd>{p.batch}</dd>
-            </div>
-            <div>
-              <dt>Email</dt>
-              <dd>{p.email}</dd>
-            </div>
-          </dl>
-          <div className="cy-grid">
-            <Field label="Full name" value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} error={details.fieldErrors.name} />
-            <Field label="Phone" type="tel" value={d.phone} onChange={(e) => setD({ ...d, phone: e.target.value })} error={details.fieldErrors.phone} hint="Shared with a company only after you opt in to its drive." />
+          <div className="form-row">
+            <Field label="Full name" size="md" value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} error={details.fieldErrors.name} />
+            <Field label="Phone" size="md" optional type="tel" placeholder="10-digit mobile" value={d.phone} onChange={(e) => setD({ ...d, phone: e.target.value })} error={details.fieldErrors.phone} hint="Shared with a company only after you opt in to its drive." />
           </div>
-          <Field label="Skills" value={d.skills} onChange={(e) => setD({ ...d, skills: e.target.value })} hint="Separate with commas, e.g. React, SQL, Python." />
+          <Field label="Skills" size="lg" optional placeholder="React, SQL, Python" value={d.skills} onChange={(e) => setD({ ...d, skills: e.target.value })} hint="Separate with commas. Companies see these." />
           <div className="buttons">
             <button className="primary" type="submit" disabled={details.busy}>
               {details.busy ? "Saving…" : "Save details"}
@@ -437,7 +456,7 @@ export default function StudentProfile() {
           <>
             <MarksForm initial={view.verified} disabled submitLabel="" onSave={async () => undefined} />
             {view.pendingUpdate ? (
-              <p className="stage working">Your change request is waiting for review.</p>
+              <p className="form-note">Your change request is waiting for review.</p>
             ) : showChange ? (
               <MarksForm
                 initial={view.verified}
@@ -449,11 +468,12 @@ export default function StudentProfile() {
                 }}
               />
             ) : (
-              <p className="buttons">
-                <button type="button" onClick={() => setShowChange(true)}>
+              <div className="sp-change">
+                <span>New semester results out?</span>
+                <button type="button" className="small" onClick={() => setShowChange(true)}>
                   Request a change
                 </button>
-              </p>
+              </div>
             )}
           </>
         ) : (
@@ -467,8 +487,8 @@ export default function StudentProfile() {
         )}
       </Section>
 
-      <Section title="Marksheets" note="Clear scans or the original PDFs. Each file is checked for safety before anyone opens it.">
-        <ul className="rows cy-docs">
+      <Section title="Marksheets" note="Clear scans or the original PDFs. Every file is cleaned for safety before anyone opens it.">
+        <ul className="sp-docs">
           <DocRow label={DOCUMENT_LABELS.MARKSHEET_10} doc={one("MARKSHEET_10")} canEdit={view.canEdit} onUpload={upload("MARKSHEET_10")} onRemove={one("MARKSHEET_10") ? remove(one("MARKSHEET_10")!.id) : undefined} />
           <DocRow
             label={one("DIPLOMA") ? DOCUMENT_LABELS.DIPLOMA : DOCUMENT_LABELS.MARKSHEET_12}
@@ -511,32 +531,30 @@ export default function StudentProfile() {
         </ul>
       </Section>
 
-      {view.canEdit && (
-        <Section title="Send for verification">
-          {view.missing.length ? (
-            <div className="panel cy-wide">
-              <p>Still missing:</p>
-              <ul className="cy-missing">
-                {view.missing.map((m) => (
-                  <li key={m}>{m}</li>
-                ))}
-              </ul>
-            </div>
-          ) : (
-            <p className="lead">Everything is in. Check your marks once more, then send it. You can't change marks while it's being checked.</p>
-          )}
-          <p className="buttons">
-            <button
-              type="button"
-              className="primary"
-              disabled={!!view.missing.length || action.busy}
-              onClick={() => void action.run(async () => after(studentApi.submit()))}
-            >
-              {action.busy ? "Sending…" : p.status === "REJECTED" ? "Send again for verification" : "Send for verification"}
-            </button>
-          </p>
-        </Section>
-      )}
+      </div>
+      <div className="rq-side">
+        {sendBlock}
+        <Aside title="How verification works">
+          <ol className="ui-steps-list">
+            <li>
+              <span>
+                <strong>Fill and upload</strong>Marks exactly as on your marksheets.
+              </span>
+            </li>
+            <li>
+              <span>
+                <strong>Send it</strong>Marks lock while it's being checked.
+              </span>
+            </li>
+            <li>
+              <span>
+                <strong>Get verified</strong>Then companies can invite you.
+              </span>
+            </li>
+          </ol>
+        </Aside>
+      </div>
+      </div>
     </>
   );
 }

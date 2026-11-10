@@ -33,7 +33,7 @@ test("a person with two roles can switch between them", async ({ page }) => {
   await page.locator("details.switcher summary").click();
   await page.getByRole("button", { name: "Student" }).click();
   await expect(page).toHaveURL(/\/student/);
-  await expect(page.getByRole("link", { name: "My profile" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Pages" }).getByRole("link", { name: "My profile" })).toBeVisible();
   await page.locator("details.switcher summary").click();
   await page.getByRole("button", { name: /Volunteer/ }).click();
   await expect(page).toHaveURL(/\/office/);

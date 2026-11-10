@@ -255,6 +255,18 @@ export function authRoutes({ service, cookieSecure }: AuthRouteOptions): RouteDe
 
     defineRoute({
       method: "patch",
+      path: "/me",
+      routeClass: "LIGHT",
+      access: "authenticated",
+      summary: "Change my name",
+      tags: ["auth"],
+      request: { body: z.object({ name: z.string().trim().min(2, "Enter your name.").max(100) }).strict() },
+      responses: { 200: { description: "Current user" } },
+      handler: ({ auth, body }) => service.updateMe(auth.userId, body),
+    }),
+
+    defineRoute({
+      method: "patch",
       path: "/me/password",
       routeClass: "LIGHT",
       access: "authenticated",

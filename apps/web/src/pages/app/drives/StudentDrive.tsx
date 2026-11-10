@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
+import { PARTICIPATION_LABELS } from "@cyrus/shared";
+import { Aside, Badge } from "../../../components/kit";
 import { useApiForm } from "../../../components/useApiForm";
-import { Alert, EmptyState, PageTitle } from "../../../components/ui";
+import { Alert } from "../../../components/ui";
 import { drivesApi, offersApi, type StudentDriveView } from "../../../lib/api";
 import { OfferChip } from "./Offers";
 import { openLink } from "./format";
 import { useTitle } from "../../../lib/useTitle";
-import { DriveStatusChip, ParticipationChip, RoundTimeline } from "./shared";
-import { eligibilityLines, jobLabel, pay, timeLeft, when } from "./format";
+import { RoundTimeline } from "./shared";
+import { PARTICIPATION_TONE, eligibilityLines, jobLabel, pay, timeLeft, when } from "./format";
 
 type Full = Extract<StudentDriveView, { inDrive: true }>;
 
@@ -30,21 +32,30 @@ export default function StudentDrive() {
 
   return (
     <>
-      <header className="page-head">
-        <PageTitle trail={[{ label: "Drives", to: "/student/drives" }]} here={`${drive.company} · ${drive.roleTitle}`} />
-        <p className="lead cy-drive-sub">
-          <span>{jobLabel(drive.jobType)}</span>
-          <DriveStatusChip status={drive.status} />
-          {drive.inDrive && <ParticipationChip status={drive.me.status} />}
-        </p>
+      <header className="rq-head">
+        <div className="rq-head-text">
+          <p className="rq-crumb">
+            <Link to="/student/drives">Drives</Link>
+            <span aria-hidden="true">/</span>
+            <span>{drive.company}</span>
+          </p>
+          <h1 className="rq-title">{drive.roleTitle}</h1>
+          <p className="rq-meta">
+            <span>{drive.company}</span>
+            <span>{jobLabel(drive.jobType)}</span>
+            {drive.inDrive ? <Badge tone={PARTICIPATION_TONE[drive.me.status]}>{PARTICIPATION_LABELS[drive.me.status]}</Badge> : <Badge tone="neutral">Invite only</Badge>}
+          </p>
+        </div>
       </header>
       {drive.inDrive ? (
         <FullDrive drive={drive} onChange={setDrive} />
       ) : (
-        <EmptyState sprite="blocked" family="azure">
-          {drive.company} is hiring for {drive.roleTitle}. Only students invited to this drive can see its details and rounds. Invites go to verified students who match the company's rules,
-          by email.
-        </EmptyState>
+        <div className="rq-empty-state sd-locked">
+          <p className="rq-empty-title">Only invited students can see this drive</p>
+          <p>
+            {drive.company} is hiring for {drive.roleTitle}. Invites go by email to verified students who match the company's rules.
+          </p>
+        </div>
       )}
     </>
   );
@@ -56,29 +67,30 @@ function Answer({ drive, onChange }: { drive: Full; onChange: (d: StudentDriveVi
   const { me } = drive;
   if (drive.status === "CANCELLED") {
     return (
-      <div className="banner fam-ember">
-        <div className="banner-words">
-          <p className="banner-title">This drive was cancelled</p>
-          {drive.cancelReason && <p className="banner-detail">{drive.cancelReason}</p>}
+      <section className="ui-status tone-danger" aria-label="Where you are in this drive">
+        <span className="ui-status-dot" aria-hidden="true" />
+        <div className="ui-status-text">
+          <p className="ui-status-title">This drive was cancelled</p>
+          {drive.cancelReason && <p className="ui-status-body">{drive.cancelReason}</p>}
         </div>
-      </div>
+      </section>
     );
   }
 
   const checkInRound = drive.rounds.find((r) => r.my?.checkInOpen && !r.my.attended);
   const TEXT: Partial<Record<typeof me.status, [string, string, string]>> = {
-    INVITED: ["You're invited to this drive", "", "fam-azure"],
-    OPTED_IN: ["You've joined this drive", "Follow the rounds below. You'll be told when results or the schedule change.", "fam-lime"],
-    OPTED_OUT: ["You skipped this drive", "", "fam-sun"],
-    EXPIRED: ["You didn't answer in time", "The joining deadline has passed.", "fam-sun"],
-    ELIMINATED: ["You're out of this drive", "You weren't selected in one of the rounds. Your results are below. Keep going: other drives are coming.", "fam-sun"],
-    NO_SHOW: ["You were marked absent", "You missed a round after joining, so you're out of this drive. Talk to the placement office if this is a mistake.", "fam-ember"],
-    SELECTED: ["You're selected!", "You cleared every round. The company will share the offer letter here.", "fam-lime"],
-    OFFERED: ["You have an offer", "Read the letter and answer before the deadline.", "fam-lime"],
-    PLACED: ["You're placed!", "You accepted this offer. Congratulations. The placement office has your placement on record.", "fam-lime"],
-    OFFER_DECLINED: ["You declined this offer", "You can still take part in other drives you're invited to.", "fam-sun"],
+    INVITED: ["You're invited to this drive", "", "warning"],
+    OPTED_IN: ["You've joined this drive", "Follow the rounds below. You'll be told when results or the schedule change.", "success"],
+    OPTED_OUT: ["You skipped this drive", "", "warning"],
+    EXPIRED: ["You didn't answer in time", "The joining deadline has passed.", "warning"],
+    ELIMINATED: ["You're out of this drive", "You weren't selected in one of the rounds. Your results are below. Keep going: other drives are coming.", "warning"],
+    NO_SHOW: ["You were marked absent", "You missed a round after joining, so you're out of this drive. Talk to the placement office if this is a mistake.", "danger"],
+    SELECTED: ["You're selected!", "You cleared every round. The company will share the offer letter here.", "success"],
+    OFFERED: ["You have an offer", "Read the letter and answer before the deadline.", "success"],
+    PLACED: ["You're placed!", "You accepted this offer. Congratulations. The placement office has your placement on record.", "success"],
+    OFFER_DECLINED: ["You declined this offer", "You can still take part in other drives you're invited to.", "warning"],
   };
-  const [title, base, family] = TEXT[me.status] ?? ["", "", "fam-sun"];
+  const [title, base, tone] = TEXT[me.status] ?? ["", "", "warning"];
   const detail =
     me.status === "OPTED_IN" && checkInRound
       ? `Check-in is open for ${checkInRound.title}. Scan the QR code on the screen at the venue with your phone camera.`
@@ -89,30 +101,33 @@ function Answer({ drive, onChange }: { drive: Full; onChange: (d: StudentDriveVi
           : base;
 
   return (
-    <div className={`banner ${family} cy-next`}>
-      <div className="banner-words">
-        <p className="banner-title">{title}</p>
-        {detail && <p className="banner-detail">{detail}</p>}
-        {form.error && <p className="banner-detail cy-strong">{form.error}</p>}
+    <section className={`ui-status sd-status tone-${tone}`} aria-label="Where you are in this drive">
+      <span className="ui-status-dot" aria-hidden="true" />
+      <div className="ui-status-text">
+        <p className="ui-status-title">{title}</p>
+        {detail && <p className="ui-status-body">{detail}</p>}
+        {form.error && <p className="ui-status-body sd-error">{form.error}</p>}
         {me.canJoin && (
-          <label className="cy-check cy-consent">
+          <label className="sd-consent">
             <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> I agree to share my profile, marks and resume with {drive.company}.
           </label>
         )}
       </div>
-      <div className="cy-next-actions">
-        {me.canJoin && (
-          <button type="button" className="banner-go" disabled={!agree || form.busy} onClick={() => void form.run(async () => onChange(await drivesApi.join(drive.id)))}>
-            Join the drive
-          </button>
-        )}
-        {me.canSkip && (
-          <button type="button" className="banner-go cy-go-quiet" disabled={form.busy} onClick={() => void form.run(async () => onChange(await drivesApi.skip(drive.id)))}>
-            {me.status === "OPTED_IN" ? "Leave the drive" : "Skip"}
-          </button>
-        )}
-      </div>
-    </div>
+      {(me.canJoin || me.canSkip) && (
+        <div className="ui-status-actions">
+          {me.canJoin && (
+            <button type="button" className="primary" disabled={!agree || form.busy} onClick={() => void form.run(async () => onChange(await drivesApi.join(drive.id)))}>
+              Join the drive
+            </button>
+          )}
+          {me.canSkip && (
+            <button type="button" disabled={form.busy} onClick={() => void form.run(async () => onChange(await drivesApi.skip(drive.id)))}>
+              {me.status === "OPTED_IN" ? "Leave the drive" : "Skip"}
+            </button>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -120,40 +135,52 @@ function FullDrive({ drive, onChange }: { drive: Full; onChange: (d: StudentDriv
   return (
     <>
       <Answer drive={drive} onChange={onChange} />
-      {drive.offer && <OfferCard drive={drive} onChange={onChange} />}
-      <div className="cy-two">
-        <section>
-          <div className="section-head">
-            <h2>Rounds</h2>
-          </div>
-          <RoundTimeline rounds={drive.rounds} />
-          {drive.me.canJoin && drive.rounds.some((r) => r.mode === "ONLINE") && <p className="faint small">Online test links appear here after you join.</p>}
-        </section>
-        <section className="stack">
-          <div className="panel stack">
-            <h2 className="cy-h3">The job</h2>
-            <dl className="cy-facts">
+      <div className="ui-split rq-split">
+        <div className="rq-main">
+          {drive.offer && <OfferCard drive={drive} onChange={onChange} />}
+          <section className="rq-card">
+            <div className="rq-card-head">
+              <h2>Rounds</h2>
+              <p>
+                {drive.rounds.length} round{drive.rounds.length === 1 ? "" : "s"}, in order. Your check-in, place in line and results show under each one.
+                {drive.me.canJoin && drive.rounds.some((r) => r.mode === "ONLINE") && " Online test links appear after you join."}
+              </p>
+            </div>
+            <div className="sd-rounds">
+              <RoundTimeline rounds={drive.rounds} />
+            </div>
+          </section>
+          {drive.description && (
+            <section className="rq-card">
+              <div className="rq-card-head">
+                <h2>About the job</h2>
+              </div>
+              <p className="sd-desc">{drive.description}</p>
+            </section>
+          )}
+        </div>
+        <div className="rq-side">
+          <Aside title="The job">
+            <dl className="sh-facts sd-facts">
+              <div><dt>Type</dt><dd>{jobLabel(drive.jobType)}</dd></div>
               <div><dt>Pay</dt><dd>{pay(drive)}</dd></div>
-              <div><dt>Location</dt><dd>{drive.location ?? "—"}</dd></div>
+              <div><dt>Location</dt><dd>{drive.location ?? "Not given"}</dd></div>
               <div><dt>Bond</dt><dd>{drive.bondMonths ? `${drive.bondMonths} months` : "None"}</dd></div>
               <div><dt>Join by</dt><dd>{when(drive.optInDeadline)}</dd></div>
             </dl>
-            {drive.description && <p className="small cy-pre">{drive.description}</p>}
-          </div>
-          <div className="panel stack">
-            <h2 className="cy-h3">About {drive.company}</h2>
-            {drive.companyAbout && <p className="small">{drive.companyAbout}</p>}
+          </Aside>
+          <Aside title={`About ${drive.company}`}>
+            {drive.companyAbout ? <p className="sd-about">{drive.companyAbout}</p> : <p className="sd-about faint">No description yet.</p>}
             {drive.companyWebsite && (
-              <p className="small">
-                <a href={drive.companyWebsite} target="_blank" rel="noreferrer">
-                  {drive.companyWebsite.replace(/^https?:\/\//, "")}
-                </a>
-              </p>
+              <a className="sd-site" href={drive.companyWebsite} target="_blank" rel="noreferrer">
+                {drive.companyWebsite.replace(/^https?:\/\//, "")}
+              </a>
             )}
-            <h3 className="cy-h3">Who could apply</h3>
-            <ul className="cy-list small">{eligibilityLines(drive.eligibility).map((l) => <li key={l}>{l}</li>)}</ul>
-          </div>
-        </section>
+          </Aside>
+          <Aside title="Who could apply">
+            <ul className="rq-rules">{eligibilityLines(drive.eligibility).map((l) => <li key={l}>{l}</li>)}</ul>
+          </Aside>
+        </div>
       </div>
     </>
   );
@@ -170,12 +197,12 @@ function OfferCard({ drive, onChange }: { drive: Full; onChange: (d: StudentDriv
       onChange(await drivesApi.mineOne(drive.id));
     });
   return (
-    <section className="panel stack cy-offer" aria-label="Your offer">
-      <div className="cy-card-top">
-        <p className="cy-h3">Offer: {o.roleTitle}</p>
+    <section className="rq-card sd-offer" aria-label="Your offer">
+      <div className="rq-card-head sd-offer-head">
+        <h2>Offer: {o.roleTitle}</h2>
         <OfferChip status={o.status} forStudent />
       </div>
-      <dl className="cy-facts">
+      <dl className="sd-offer-facts">
         <div>
           <dt>CTC</dt>
           <dd>{o.ctcLpa != null ? `₹${o.ctcLpa} LPA` : "As in the letter"}</dd>
@@ -190,7 +217,7 @@ function OfferCard({ drive, onChange }: { drive: Full; onChange: (d: StudentDriv
         </div>
       </dl>
       {form.error && <Alert>{form.error}</Alert>}
-      <div className="buttons">
+      <div className="sd-offer-actions">
         <button type="button" onClick={() => void form.run(() => openLink(() => offersApi.letter(o.id)))}>
           Read the offer letter
         </button>
@@ -199,13 +226,13 @@ function OfferCard({ drive, onChange }: { drive: Full; onChange: (d: StudentDriv
             <button type="button" className="primary" disabled={form.busy} onClick={() => answer(true)}>
               Accept offer
             </button>
-            <button type="button" className="quiet" disabled={form.busy} onClick={() => answer(false)}>
+            <button type="button" className="sd-decline" disabled={form.busy} onClick={() => answer(false)}>
               Decline
             </button>
           </>
         )}
       </div>
-      {o.status === "EXPIRED" && <p className="faint small">The deadline passed without an answer. Talk to the placement office if you still want this offer.</p>}
+      {o.status === "EXPIRED" && <p className="sd-offer-note">The deadline passed without an answer. Talk to the placement office if you still want this offer.</p>}
     </section>
   );
 }

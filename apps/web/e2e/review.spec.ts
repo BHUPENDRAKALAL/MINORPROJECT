@@ -46,9 +46,9 @@ test.describe("review queue", () => {
     await signIn(page, s.email, s.password);
     await page.goto("/student/profile");
     await expect(page.locator(".banner-title", { hasText: "Your profile needs changes" })).toBeVisible();
-    await expect(page.getByText("Marks don't match the marksheet.")).toBeVisible();
+    await expect(page.getByText(/Marks don't match the marksheet/).first()).toBeVisible();
     await expect(page.getByText("CGPA on the grade card is 7.6, not 7.9.")).toBeVisible();
-    await page.getByLabel("CGPA (out of 10)").fill("7.6");
+    await page.getByLabel("CGPA", { exact: true }).fill("7.6");
     await page.getByRole("button", { name: "Save marks" }).click();
     await page.getByRole("button", { name: "Send again for verification" }).click();
     await expect(page.locator(".banner-title", { hasText: "Your profile is being checked" })).toBeVisible();
@@ -79,7 +79,7 @@ test.describe("review queue", () => {
     await signIn(page, demo("staff"));
     await page.goto("/office/review");
     await page.getByRole("button", { name: "Get next task" }).click();
-    await expect(page.getByText("Second check")).toBeVisible();
+    await expect(page.locator(".rq-crumb")).toContainText("Second check");
     await expect(page.getByText(/First reviewer:/)).toBeVisible();
     await page.getByRole("button", { name: "Verify", exact: true }).click();
     await expect(page.getByText("Done. The student has been told.")).toBeVisible();

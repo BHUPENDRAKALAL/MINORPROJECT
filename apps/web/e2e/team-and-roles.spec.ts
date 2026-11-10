@@ -51,8 +51,8 @@ test.describe("team page and who can open what", () => {
 
   test("staff don't see the TPO-only pages", async ({ page }) => {
     await signIn(page, demo("staff"));
-    await expect(page.getByRole("link", { name: "Review queue" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Team" })).toHaveCount(0);
+    await expect(page.getByRole("navigation", { name: "Pages" }).getByRole("link", { name: "Review queue" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Pages" }).getByRole("link", { name: "Team" })).toHaveCount(0);
     await page.goto("/office/team");
     await expect(page.getByRole("heading", { name: "Not available" })).toBeVisible();
   });

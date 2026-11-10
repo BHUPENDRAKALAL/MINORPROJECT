@@ -7,8 +7,8 @@ import { Avatar, BrandMark, Icon } from "../components/ui";
 import { APP_NAME } from "../lib/brand";
 import { ROLE_LABELS, ROLE_PRIORITY } from "../lib/constants";
 import { useAuth } from "./useAuth";
-import { homeFor, isCurrent, navFor, type NavItem } from "./nav";
-import { useUnread } from "./useUnread";
+import { groupNav, homeFor, isCurrent, navFor, type NavItem } from "./nav";
+import { useUnread, useUnreadWatcher } from "./useUnread";
 import { useTheme } from "./theme";
 import { useSidePanel } from "./useSidePanel";
 
@@ -118,7 +118,7 @@ function RoleSwitcher() {
 
 /** The person: avatar, name, and a menu with change password, theme and sign out. */
 function UserMenu({ placement }: { placement: "side" | "top" }) {
-  const { me, signOut } = useAuth();
+  const { me, role, signOut } = useAuth();
   const { theme, toggle } = useTheme();
   const navigate = useNavigate();
   const ref = useCloseOnNavigate();
@@ -135,30 +135,38 @@ function UserMenu({ placement }: { placement: "side" | "top" }) {
         <Icon name="chevron" />
       </summary>
       <div className="user-menu-panel" role="menu">
-        <p className="user-menu-email small">{me.email}</p>
-        <Link className="nav-item" role="menuitem" to="/account/password">
-          <Icon name="settings" />
-          <span className="nav-name">Change password</span>
-        </Link>
-        <button type="button" className="nav-item" role="menuitem" onClick={toggle}>
-          <Icon name="panel" />
-          <span className="nav-name">{theme === "dark" ? "Light theme" : "Dark theme"}</span>
-        </button>
-        {import.meta.env.DEV && (
-          <Link className="nav-item" role="menuitem" to="/status">
-            <Icon name="activity" />
-            <span className="nav-name">System status (dev)</span>
+        <div className="um-head">
+          <Avatar name={name} />
+          <div className="um-who">
+            <span className="um-name">{name}</span>
+            <span className="um-email">{me.email}</span>
+            {role && <span className="um-role">{ROLE_LABELS[role]}</span>}
+          </div>
+        </div>
+        <div className="um-group">
+          <Link className="um-item" role="menuitem" to="/account">
+            <Icon name="brief" />
+            <span>Your account</span>
           </Link>
-        )}
-        <button
-          type="button"
-          className="nav-item"
-          role="menuitem"
-          onClick={() => void signOut().then(() => navigate("/sign-in", { replace: true }))}
-        >
-          <Icon name="go" />
-          <span className="nav-name">Sign out</span>
-        </button>
+          <button type="button" className="um-item" role="menuitemcheckbox" aria-checked={theme === "dark"} onClick={toggle}>
+            <Icon name="panel" />
+            <span>Dark theme</span>
+            <span className={`um-switch${theme === "dark" ? " is-on" : ""}`} aria-hidden="true" />
+          </button>
+          {import.meta.env.DEV && (
+            <Link className="um-item" role="menuitem" to="/status">
+              <Icon name="activity" />
+              <span>System status</span>
+              <span className="um-tag">dev</span>
+            </Link>
+          )}
+        </div>
+        <div className="um-group">
+          <button type="button" className="um-item um-danger" role="menuitem" onClick={() => void signOut().then(() => navigate("/sign-in", { replace: true }))}>
+            <Icon name="go" />
+            <span>Sign out</span>
+          </button>
+        </div>
       </div>
     </details>
   );
@@ -174,6 +182,7 @@ export default function Shell({ children }: { children?: ReactNode }) {
   const inMore = items.length <= 5 ? [] : items.slice(4);
   const moreCurrent = inMore.some((i) => isCurrent(i, location.pathname));
   const side = useSidePanel();
+  useUnreadWatcher();
   // Open: the chosen width. Folded: Foundry's own rail width (set by its :has(.side-toggle:checked) rule).
   const shellStyle = side.folded ? undefined : ({ "--sidebar": `${side.width}px` } as CSSProperties);
   const foldLabel = side.folded ? "Open the side panel (Ctrl+B)" : "Fold the side panel (Ctrl+B)";
@@ -206,16 +215,30 @@ export default function Shell({ children }: { children?: ReactNode }) {
           <UserMenu placement="top" />
         </div>
         <nav className="side-nav" aria-label="Pages">
-          <ul className="nav-list">
-            {items.map((i) => (
-              <NavRow key={i.key} item={i} />
-            ))}
-          </ul>
+          {groupNav(items).map((g, n) => (
+            <div key={g.label ?? `top-${n}`} className="nav-group" role="group" aria-label={g.label ?? "Main"}>
+              {g.label && (
+                <p className="nav-label" aria-hidden="true">
+                  {g.label}
+                </p>
+              )}
+              <ul className="nav-list">
+                {g.items.map((i) => (
+                  <NavRow key={i.key} item={i} />
+                ))}
+              </ul>
+            </div>
+          ))}
         </nav>
         <UserMenu placement="side" />
       </aside>
       <div className="side-resize" {...side.handleProps} />
-      <main id="main">{children ?? <Outlet />}</main>
+      <main id="main">
+        {/* Keyed by the page: each page fades in when you move to it */}
+        <div className="ui-page" key={location.pathname}>
+          {children ?? <Outlet />}
+        </div>
+      </main>
       <nav className="tabbar" aria-label="Pages" style={{ gridTemplateColumns: `repeat(${inBar.length + (inMore.length ? 1 : 0)}, minmax(0, 1fr))` }}>
         {inBar.map((i) => (
           <Tab key={i.key} item={i} />

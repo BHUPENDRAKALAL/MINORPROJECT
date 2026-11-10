@@ -5,6 +5,7 @@ import { loadEnv } from "../config/env.ts";
 import { createDb } from "../lib/db.ts";
 import { createRedis } from "../lib/redis.ts";
 import { s3Storage } from "../lib/storage.ts";
+import { createSanitizer } from "../lib/sanitizer.ts";
 import { resolveProcessor, type JobPayload } from "../workers/processors.ts";
 import { onShutdown } from "./shutdown.ts";
 
@@ -19,6 +20,7 @@ const env = loadEnv();
 const db = createDb(env.DATABASE_URL);
 const connection = createRedis(env.REDIS_URL, "queue");
 const storage = s3Storage(env);
+const sanitize = createSanitizer({ url: env.SANITIZER_URL, log: { warn: (details, message) => console.warn(`[worker] ${message}`, details) } });
 
 const allKeys = Object.keys(QUEUES) as QueueKey[];
 const wanted = (process.env["WORKER_QUEUES"] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -33,7 +35,7 @@ const workers = keys.map((key) => {
       if (job.data.jobId) {
         await db.job.update({ where: { id: job.data.jobId }, data: { status: "RUNNING", startedAt: new Date() } });
       }
-      const result = await handler(job, { db, env, storage });
+      const result = await handler(job, { db, env, storage, sanitize });
       if (job.data.jobId) {
         await db.job.update({
           where: { id: job.data.jobId },

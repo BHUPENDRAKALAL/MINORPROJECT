@@ -425,7 +425,8 @@ test("live drive simulation: every role at once", async ({ browser, request }) =
 
   await tpo.goto("/office/drives");
   await tpo.getByRole("link", { name: /Software Engineer/ }).click();
-  await tpo.getByRole("button", { name: "Close drive" }).click();
+  await tpo.getByRole("button", { name: "More actions" }).click();
+  await tpo.getByRole("menuitem", { name: "Close drive" }).click();
   await expect(tpo.getByText("Drive closed.")).toBeVisible();
   await shot(tpo, "tpo-drive-closed");
 });

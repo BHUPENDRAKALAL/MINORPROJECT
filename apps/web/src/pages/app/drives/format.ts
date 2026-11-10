@@ -1,4 +1,5 @@
-import { JOB_TYPE_LABELS, ROUND_KINDS, type Eligibility, type JobType, type Role, type RoundType } from "@cyrus/shared";
+import { JOB_TYPE_LABELS, ROUND_KINDS, type DriveStatus, type Eligibility, type JobType, type ParticipationStatus, type Role, type RoundType } from "@cyrus/shared";
+import type { Tone } from "../../../components/kit";
 import type { Round } from "../../../lib/api";
 
 /** Where the drive pages live for this role (HR's drives are their home page). */
@@ -92,3 +93,22 @@ export async function openLink(get: () => Promise<{ url: string }>) {
     throw e;
   }
 }
+
+/** The dot colour for a student's place in a drive (kit Badge tones). */
+export const PARTICIPATION_TONE: Record<ParticipationStatus, Tone> = {
+  INVITED: "warning",
+  OPTED_IN: "success",
+  OPTED_OUT: "neutral",
+  EXPIRED: "neutral",
+  ELIMINATED: "danger",
+  NO_SHOW: "danger",
+  SELECTED: "success",
+  OFFERED: "accent",
+  PLACED: "accent",
+  OFFER_DECLINED: "neutral",
+  REMOVED: "neutral",
+};
+
+/** True while the drive still needs something from the student or is still running for them. */
+export const isActiveForStudent = (s: ParticipationStatus, drive: DriveStatus) =>
+  drive !== "CANCELLED" && drive !== "CLOSED" && ["INVITED", "OPTED_IN", "SELECTED", "OFFERED"].includes(s);

@@ -20,10 +20,10 @@ test.describe("drives", () => {
     await expect(page.getByRole("heading", { name: "Drives" })).toBeVisible();
     await page.getByRole("link", { name: "New drive" }).click();
     await page.getByLabel("Role", { exact: true }).fill(role);
-    await page.getByLabel("CTC (lakh per year)").fill("14");
+    await page.getByLabel("CTC").fill("14");
     await page.getByLabel("Location").fill("Jaipur");
-    await page.getByLabel("Last date for students to join").fill(inDays(5));
-    await page.getByLabel("Job description").fill("Build the APIs behind our store software. Node.js, SQL and a lot of testing.");
+    await page.getByLabel("Last date to join").fill(inDays(5));
+    await page.getByLabel("Description").fill("Build the APIs behind our store software. Node.js, SQL and a lot of testing.");
     await page.getByRole("button", { name: "Create draft and continue" }).click();
 
     // ── step 2, who can apply: only IT with CGPA 8+ (Aman 8.1 and Pooja 8.6 in the demo data)
@@ -98,7 +98,7 @@ test.describe("drives", () => {
     const row = page.locator(".cy-other", { hasText: role });
     await expect(row.getByText("Invite only")).toBeVisible();
     await row.click();
-    await expect(page.getByText(/Only students invited to this drive can see its details/)).toBeVisible();
+    await expect(page.getByText(/Only invited students can see this drive/)).toBeVisible();
     await expect(page.getByText("Technical round 2")).toHaveCount(0);
   });
 
@@ -107,9 +107,9 @@ test.describe("drives", () => {
     await signIn(page, demo("hr"));
     await page.getByRole("link", { name: "New drive" }).click();
     await page.getByLabel("Role", { exact: true }).fill(role);
-    await page.getByLabel("CTC (lakh per year)").fill("6");
-    await page.getByLabel("Last date for students to join").fill(inDays(6));
-    await page.getByLabel("Job description").fill("Reports and dashboards for store managers, in SQL and Excel.");
+    await page.getByLabel("CTC").fill("6");
+    await page.getByLabel("Last date to join").fill(inDays(6));
+    await page.getByLabel("Description").fill("Reports and dashboards for store managers, in SQL and Excel.");
     await page.getByRole("button", { name: "Create draft and continue" }).click();
     await page.getByRole("button", { name: "Save and continue" }).click();
     await page.getByRole("button", { name: "OA → Technical → HR" }).click();

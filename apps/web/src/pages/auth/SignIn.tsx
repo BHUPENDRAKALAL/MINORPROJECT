@@ -60,6 +60,7 @@ export default function SignIn() {
           label="Email"
           type="email"
           autoComplete="username"
+          placeholder="name@example.com"
           autoCapitalize="none"
           required
           value={email}
@@ -70,12 +71,13 @@ export default function SignIn() {
           label="Password"
           type="password"
           autoComplete="current-password"
+          placeholder="Your password"
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           error={form.fieldErrors.password}
         />
-        <button className="primary button-wide" type="submit" disabled={form.busy}>
+        <button className="primary button-wide" type="submit" disabled={form.busy} aria-busy={form.busy}>
           {form.busy ? "Signing in…" : "Sign in"}
         </button>
       </form>

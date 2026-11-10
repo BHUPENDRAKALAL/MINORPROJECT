@@ -1,6 +1,7 @@
 // Adapted from Foundry (Apache-2.0), see src/vendor/foundry/LICENSE
 // React versions of Foundry's dashboard macros (_ui.html) and shapes. Colour comes from the stylesheet, never from here.
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
+import { toast } from "sonner";
 import { Link } from "react-router";
 import type { Family, IconName, SpriteName } from "../app/nav";
 import { APP_NAME } from "../lib/brand";
@@ -161,13 +162,17 @@ export function PageTitle({ trail = [], here }: { trail?: { label: string; to: s
 }
 
 /** Done: a nodding character and the words. */
+/**
+ * "It worked" messages show as a toast in the corner instead of a block on the page.
+ * Each new message (or the same one again after it was cleared) pops once.
+ */
 export function Saved({ children }: { children: ReactNode }) {
-  return (
-    <p className="alert alert-done" role="status">
-      <Sprite name="nod" size={48} plays />
-      <span>{children}</span>
-    </p>
-  );
+  const key = typeof children === "string" ? children : String(children);
+  useEffect(() => {
+    toast.success(children, { id: `saved:${key}` });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return null;
 }
 
 export function Alert({ children }: { children: ReactNode }) {

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useAuth } from "../../../app/useAuth";
 import { useApiForm } from "../../../components/useApiForm";
-import { Alert, EmptyState } from "../../../components/ui";
+import { Alert } from "../../../components/ui";
 import { filesApi, interviewsApi, type PanelView, type QueueRow, type Recommendation } from "../../../lib/api";
 import { openLink } from "./format";
 import { EarlierRounds, KeyPointsSummary, RatingInput } from "./KeyPoints";
@@ -56,116 +56,127 @@ export default function PanelScreen() {
 
   return (
     <>
-      <header className="page-head">
-        <h1 className="title">
-          {panel.name}
-          {panel.location ? <span className="faint"> · {panel.location}</span> : null}
-        </h1>
-        <p className="lead">
-          {panel.round.company} · {panel.round.roleTitle} · {panel.round.title}
-          {manager && (
-            <>
-              {" · "}
-              <Link to={drivePaths(role).round(panel.round.driveId, panel.round.id)}>Round page</Link>
-            </>
-          )}
-        </p>
+      <header className="rq-head">
+        <div className="rq-head-text">
+          <p className="rq-crumb">
+            <span>{panel.round.company}</span>
+            <span aria-hidden="true">/</span>
+            <span>{panel.round.roleTitle}</span>
+            <span aria-hidden="true">/</span>
+            {manager ? <Link to={drivePaths(role).round(panel.round.driveId, panel.round.id)}>{panel.round.title}</Link> : <span>{panel.round.title}</span>}
+          </p>
+          <h1 className="rq-title">
+            {panel.name}
+            {panel.location ? <span className="ps-room"> · {panel.location}</span> : null}
+          </h1>
+          <p className="rq-meta">
+            <span>About {panel.avgMinutes} min each</span>
+          </p>
+        </div>
       </header>
       {act.error && <Alert>{act.error}</Alert>}
 
-      {!panel.running ? (
-        <EmptyState sprite="smith" family="sun">
-          {panel.round.status === "SCHEDULED" ? "This round hasn't started yet. The line appears here once HR starts it." : "This round is over."}
-        </EmptyState>
-      ) : panel.current ? (
-        <Current row={panel.current} busy={act.busy} doing={doing} criteria={panel.criteria} />
-      ) : (
-        <div className="banner fam-azure cy-next">
-          <div className="banner-words">
-            <p className="banner-title">{panel.waiting.length ? `${panel.waiting.length} waiting` : "No one waiting"}</p>
-            <p className="banner-detail">
-              {panel.waiting.length
-                ? `Next: ${panel.waiting[0]!.student.name} (${panel.waiting[0]!.student.rollNo}). Calling tells them to come to ${panel.location ?? "your room"}.`
-                : "When HR adds more students to your line they'll appear here."}
-            </p>
-          </div>
-          {panel.waiting.length > 0 && (
-            <div className="cy-next-actions">
-              <button type="button" className="banner-go" disabled={act.busy} onClick={() => doing(() => interviewsApi.callNext(panel.id))}>
-                Call next
-              </button>
+      <div className="ui-split rq-split">
+        <div className="rq-main">
+          {!panel.running ? (
+            <div className="rq-empty-state">
+              <p className="rq-empty-title">{panel.round.status === "SCHEDULED" ? "Not started yet" : "This round is over"}</p>
+              <p>{panel.round.status === "SCHEDULED" ? "The line appears here once HR starts the round." : "Thanks. Your notes are with the company."}</p>
             </div>
+          ) : panel.current ? (
+            <Current row={panel.current} busy={act.busy} doing={doing} criteria={panel.criteria} />
+          ) : (
+            <section className={`ui-status tone-${panel.waiting.length ? "info" : "neutral"}`} aria-label="Your line">
+              <span className="ui-status-dot" aria-hidden="true" />
+              <div className="ui-status-text">
+                <p className="ui-status-title banner-title">{panel.waiting.length ? `${panel.waiting.length} waiting` : "No one waiting"}</p>
+                <p className="ui-status-body">
+                  {panel.waiting.length
+                    ? `Next: ${panel.waiting[0]!.student.name} (${panel.waiting[0]!.student.rollNo}). Calling tells them to come to ${panel.location ?? "your room"}.`
+                    : "When HR adds more students to your line they'll appear here."}
+                </p>
+              </div>
+              {panel.waiting.length > 0 && (
+                <div className="ui-status-actions">
+                  <button type="button" className="primary" disabled={act.busy} onClick={() => doing(() => interviewsApi.callNext(panel.id))}>
+                    Call next
+                  </button>
+                </div>
+              )}
+            </section>
           )}
         </div>
-      )}
 
-      <div className="cy-two">
-        <section>
-          <div className="section-head">
-            <h2>Waiting</h2>
-            <span className="pill">{panel.waiting.length}</span>
-            <span className="faint small">About {panel.avgMinutes} min each</span>
-          </div>
-          {!panel.waiting.length ? (
-            <p className="faint">No one.</p>
-          ) : (
-            <ol className="cy-line">
-              {panel.waiting.map((w, i) => (
-                <li key={w.id}>
-                  <span className="cy-round-no">{i + 1}</span>
-                  <span className="cy-line-name">
-                    {w.student.name} <span className="faint small">{w.student.rollNo}</span>
-                    {w.skipCount > 0 && <span className="stage waiting fam-sun">Skipped once</span>}
-                  </span>
-                  {panel.running && (
-                    <button type="button" className="quiet" disabled={act.busy} onClick={() => doing(() => interviewsApi.skip(w.id))}>
-                      Skip
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
-        <section>
-          <div className="section-head">
-            <h2>Done</h2>
-            <span className="pill">{panel.done.length}</span>
-          </div>
-          {!panel.done.length ? (
-            <p className="faint">No interviews finished yet.</p>
-          ) : (
-            <ul className="cy-line">
-              {panel.done.map((d) => (
-                <li key={d.id}>
-                  <span className="cy-line-name">
-                    {d.student.name} <span className="faint small">{d.student.rollNo}</span>
-                  </span>
-                  {d.status === "ABSENT" ? (
-                    <>
-                      <span className="stage stuck fam-ember">Absent</span>
-                      {panel.running && (
-                        <button type="button" className="quiet" disabled={act.busy} onClick={() => doing(() => interviewsApi.requeue(d.id))}>
-                          Back in line
-                        </button>
-                      )}
-                    </>
-                  ) : d.session ? (
-                    <details className="cy-done-details">
-                      <summary>{d.session.recommendation ? REC_LABEL[d.session.recommendation] : "No recommendation"}</summary>
-                      <KeyPointsSummary
-                        k={{ ...d.session, average: avg(d.session.ratings) }}
-                        criteria={panel.criteria}
-                      />
-                    </details>
-                  ) : (
-                    <span className="stage idle">No recommendation</span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        <div className="rq-side">
+          <section className="rq-card">
+            <div className="rq-card-head rp-card-head">
+              <h2>
+                Waiting <span className="ui-tab-count">{panel.waiting.length}</span>
+              </h2>
+            </div>
+            {!panel.waiting.length ? (
+              <p className="rq-empty">No one.</p>
+            ) : (
+              <ol className="cy-line ps-line">
+                {panel.waiting.map((w, i) => (
+                  <li key={w.id}>
+                    <span className="ps-pos">{i + 1}</span>
+                    <span className="ps-who">
+                      <span className="ps-name">{w.student.name}</span>
+                      <span className="ps-roll">
+                        {w.student.rollNo}
+                        {w.skipCount > 0 && " · skipped once"}
+                      </span>
+                    </span>
+                    {panel.running && (
+                      <button type="button" className="small" disabled={act.busy} onClick={() => doing(() => interviewsApi.skip(w.id))}>
+                        Skip
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+          <section className="rq-card">
+            <div className="rq-card-head rp-card-head">
+              <h2>
+                Done <span className="ui-tab-count">{panel.done.length}</span>
+              </h2>
+            </div>
+            {!panel.done.length ? (
+              <p className="rq-empty">No interviews finished yet.</p>
+            ) : (
+              <ul className="cy-line ps-line">
+                {panel.done.map((d) => (
+                  <li key={d.id}>
+                    <span className="ps-who">
+                      <span className="ps-name">{d.student.name}</span>
+                      <span className="ps-roll">{d.student.rollNo}</span>
+                    </span>
+                    {d.status === "ABSENT" ? (
+                      <>
+                        <span className="stage stuck fam-ember">Absent</span>
+                        {panel.running && (
+                          <button type="button" className="small" disabled={act.busy} onClick={() => doing(() => interviewsApi.requeue(d.id))}>
+                            Back in line
+                          </button>
+                        )}
+                      </>
+                    ) : d.session ? (
+                      <details className="cy-done-details ps-done">
+                        <summary>{d.session.recommendation ? REC_LABEL[d.session.recommendation] : "No recommendation"}</summary>
+                        <KeyPointsSummary k={{ ...d.session, average: avg(d.session.ratings) }} criteria={panel.criteria} />
+                      </details>
+                    ) : (
+                      <span className="stage idle">No recommendation</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
       </div>
     </>
   );
@@ -193,25 +204,36 @@ function Current({ row, busy, doing, criteria }: { row: QueueRow; busy: boolean;
   const s = row.student;
 
   return (
-    <section className="panel stack cy-current" aria-label="Current student">
-      <div className="cy-current-head">
-        <div>
-          <p className="cy-h3">{s.name}</p>
-          <p className="faint small">
-            {s.rollNo} · {s.branch} {s.batch} · CGPA {s.cgpa ?? "—"} · {s.activeBacklogs ? `${s.activeBacklogs} active backlogs` : "no active backlogs"}
+    <section className="rq-card cy-current ps-current" aria-label="Current student">
+      <div className="ps-cur-head">
+        <div className="ps-cur-who">
+          <h2 className="ps-cur-name">{s.name}</h2>
+          <p className="rq-meta">
+            <span>{s.rollNo}</span>
+            <span>
+              {s.branch} {s.batch}
+            </span>
+            <span>CGPA {s.cgpa ?? "—"}</span>
+            <span>{s.activeBacklogs ? `${s.activeBacklogs} active backlogs` : "No active backlogs"}</span>
           </p>
-          {s.skills.length > 0 && <p className="small">Skills: {s.skills.join(", ")}</p>}
-          {s.resumeFileId && (
-            <p className="small">
-              <button type="button" className="quiet cy-inline" onClick={() => void openLink(() => filesApi.link(s.resumeFileId!)).catch(() => undefined)}>
-                Open resume
-              </button>
+          {s.skills.length > 0 && (
+            <p className="ps-skills">
+              {s.skills.map((k) => (
+                <span key={k} className="ui-tag">
+                  {k}
+                </span>
+              ))}
             </p>
           )}
-          {s.links && s.links.length > 0 && (
-            <p className="small">
-              {s.links.map((l) => (
-                <a key={l.url} href={l.url} target="_blank" rel="noreferrer" className="cy-link-gap">
+          {(s.resumeFileId || (s.links && s.links.length > 0)) && (
+            <p className="ps-links">
+              {s.resumeFileId && (
+                <button type="button" className="small" onClick={() => void openLink(() => filesApi.link(s.resumeFileId!)).catch(() => undefined)}>
+                  Open resume
+                </button>
+              )}
+              {s.links?.map((l) => (
+                <a key={l.url} href={l.url} target="_blank" rel="noreferrer" className="button small">
                   {l.label}
                 </a>
               ))}
@@ -219,16 +241,18 @@ function Current({ row, busy, doing, criteria }: { row: QueueRow; busy: boolean;
           )}
         </div>
         {row.status === "CALLED" ? (
-          <span className="stage waiting fam-sun">Called {called} ago</span>
+          <span className="rq-timer is-low">Called {called} ago</span>
         ) : (
-          <span className="stage working fam-azure">In interview · {inRoom}</span>
+          <span className="rq-timer">In interview · {inRoom}</span>
         )}
       </div>
 
+      <div className="ps-earlier">
       <EarlierRounds history={row.history} />
+      </div>      <EarlierRounds history={row.history} />
 
       {row.status === "CALLED" ? (
-        <div className="buttons">
+        <div className="ps-actions">
           <button type="button" className="primary" disabled={busy} onClick={() => doing(() => interviewsApi.start(row.id))}>
             They're here: start
           </button>
@@ -238,9 +262,12 @@ function Current({ row, busy, doing, criteria }: { row: QueueRow; busy: boolean;
         </div>
       ) : (
         <>
-          <p className="cy-h3 cy-kp-title">Key points (the company and the TPO only)</p>
+          <div className="ps-block">
+          <p className="ps-block-title">
+            Key points <span className="ps-block-note">The company and the TPO only</span>
+          </p>
           <RatingInput criteria={criteria} value={ratings} onChange={setRatings} />
-          <div className="cy-grid">
+          <div className="form-row ps-two">
             <div className="field">
               <label htmlFor={strengthsId}>Strengths (one per line)</label>
               <textarea id={strengthsId} rows={3} value={strengths} onChange={(e) => setStrengths(e.target.value)} placeholder={"Clean code\nGood with SQL"} />
@@ -254,9 +281,11 @@ function Current({ row, busy, doing, criteria }: { row: QueueRow; busy: boolean;
             <label htmlFor={notesId}>Private notes (the company and the TPO only)</label>
             <textarea id={notesId} rows={3} maxLength={4000} value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
+          </div>
+          <div className="ps-block">
           <fieldset className="cy-fieldset">
             <legend>Your recommendation</legend>
-            <div className="cy-chips">
+            <div className="cy-chips ps-rec">
               {(["SELECT", "HOLD", "REJECT"] as const).map((r) => (
                 <label key={r} className="cy-check">
                   <input type="radio" name="rec" checked={rec === r} onChange={() => setRec(r)} /> {REC_LABEL[r]}
@@ -269,7 +298,8 @@ function Current({ row, busy, doing, criteria }: { row: QueueRow; busy: boolean;
             <textarea id={remarkId} rows={2} maxLength={1000} value={remark} onChange={(e) => setRemark(e.target.value)} />
             <p className="field-hint">The placement office checks it before the student sees it. Keep it kind and useful.</p>
           </div>
-          <div className="buttons">
+          </div>
+          <div className="ps-actions">
             <button type="button" className="primary" disabled={busy} onClick={() => doing(() =>
                   interviewsApi.end(row.id, {
                     privateNotes: notes || null,

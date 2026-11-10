@@ -1,12 +1,12 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { useAuth } from "../../app/useAuth";
-import { Field } from "../../components/form";
+import { Field, PasswordMeter } from "../../components/form";
 import { useApiForm } from "../../components/useApiForm";
 import { Alert } from "../../components/ui";
 import { ApiError, authApi, type InviteInfo } from "../../lib/api";
 import { APP_NAME } from "../../lib/brand";
-import { PASSWORD_HINT, ROLE_LABELS, passwordProblem } from "../../lib/constants";
+import { ROLE_LABELS, passwordProblem } from "../../lib/constants";
 import { AuthLayout, ResultPanel } from "./AuthLayout";
 
 type Load = { state: "loading" } | { state: "ok"; invite: InviteInfo } | { state: "bad"; message: string };
@@ -55,7 +55,7 @@ export default function AcceptInvite() {
 
   if (load.state === "bad") {
     return (
-      <AuthLayout title="This invite can't be used" sprite={null} family="ember">
+      <AuthLayout title="This invite can't be used" sprite={null}>
         <ResultPanel sticker="blocked" title="Link not valid" actions={<Link className="button" to="/sign-in">Go to sign in</Link>}>
           {load.message}
         </ResultPanel>
@@ -97,27 +97,27 @@ export default function AcceptInvite() {
         </>
       }
       sprite="wave"
-      family="orchid"
     >
       {form.error && <Alert>{form.error}</Alert>}
       <form className="stack" onSubmit={onSubmit} noValidate>
         <Field label="Email" type="email" value={invite.email} readOnly disabled />
         {!invite.hasAccount && (
-          <Field label="Full name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} error={form.fieldErrors.name} />
+          <Field label="Full name" placeholder="Your full name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} error={form.fieldErrors.name} />
         )}
         <Field
           label={invite.hasAccount ? "Your password" : "Choose a password"}
           type="password"
           autoComplete={invite.hasAccount ? "current-password" : "new-password"}
+          placeholder={invite.hasAccount ? "Your password" : "At least 8 characters"}
           value={pw}
           onChange={(e) => setPw(e.target.value)}
           error={form.fieldErrors.password}
-          hint={invite.hasAccount ? undefined : PASSWORD_HINT}
+          hint={invite.hasAccount ? undefined : <PasswordMeter value={pw} />}
         />
         {!invite.hasAccount && (
-          <Field label="Type it again" type="password" autoComplete="new-password" value={pw2} onChange={(e) => setPw2(e.target.value)} error={form.fieldErrors.confirm} />
+          <Field label="Type it again" type="password" placeholder="Same as above" autoComplete="new-password" value={pw2} onChange={(e) => setPw2(e.target.value)} error={form.fieldErrors.confirm} />
         )}
-        <button className="primary button-wide" type="submit" disabled={form.busy}>
+        <button className="primary button-wide" type="submit" disabled={form.busy} aria-busy={form.busy}>
           {form.busy ? "Joining…" : "Accept invite"}
         </button>
       </form>

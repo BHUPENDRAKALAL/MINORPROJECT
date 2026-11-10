@@ -354,7 +354,19 @@ export function createAuthService(deps: AuthDeps) {
         },
       });
       const roles = await activeRoles(userId);
-      return { ...user, roles };
+      return { ...user, createdAt: (await db.user.findUniqueOrThrow({ where: { id: userId }, select: { createdAt: true } })).createdAt, roles };
+    },
+
+    /** The name shown to others. A student's name also changes on their student record. */
+    async updateMe(userId: string, input: { name: string }) {
+      const name = input.name.trim();
+      await db.$transaction(async (tx) => {
+        const before = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { name: true } });
+        await tx.user.update({ where: { id: userId }, data: { name } });
+        await tx.studentProfile.updateMany({ where: { userId }, data: { name } });
+        await audit(tx, { actorId: userId, action: "account.name_changed", entityType: "User", entityId: userId, before: { name: before.name }, after: { name } });
+      });
+      return this.me(userId);
     },
   };
 }

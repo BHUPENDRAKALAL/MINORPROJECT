@@ -264,6 +264,99 @@ export function createReviewService(deps: ReviewDeps) {
       };
     },
 
+    /**
+     * The queue as this reviewer sees it: what they may take (in the order "Get next" would hand it out),
+     * what others are checking right now, their own recent decisions, and the rules that shape their queue.
+     * Read-only: nothing is claimed here.
+     */
+    async queue(auth: AuthContext) {
+      const r = await reviewerOf(auth);
+      const f = taskFilterFor(r)!;
+      const ids = await db.$queryRaw<{ id: string }[]>`
+        SELECT t."id" FROM "ReviewTask" t WHERE ${eligibleSql(r)}
+        ORDER BY t."priority" DESC, t."createdAt" ASC LIMIT 50`;
+      const order = new Map(ids.map((x, i) => [x.id, i]));
+      const studentSelect = { id: true, name: true, rollNo: true, branch: true, batch: true } as const;
+      const [waitingRows, inProgressRows, recentRows] = await Promise.all([
+        db.reviewTask.findMany({ where: { id: { in: ids.map((x) => x.id) } } }),
+        db.reviewTask.findMany({
+          where: { status: "CLAIMED", claimedUntil: { gt: new Date() }, claimedById: { not: auth.userId }, type: { in: f.types as never[] } },
+          orderBy: { claimedUntil: "asc" },
+          take: 20,
+        }),
+        db.reviewTask.findMany({ where: { decidedById: auth.userId }, orderBy: { decidedAt: "desc" }, take: 8 }),
+      ]);
+      const studentIds = [...new Set([...waitingRows, ...inProgressRows, ...recentRows].map((t) => t.studentId).filter((x): x is string => !!x))];
+      const students = new Map((await db.studentProfile.findMany({ where: { id: { in: studentIds } }, select: studentSelect })).map((s) => [s.id, s]));
+      const dupes = new Set(
+        (
+          await db.studentDocument.findMany({
+            where: { studentId: { in: studentIds }, file: { sha256: { in: (await db.fileObject.groupBy({ by: ["sha256"], _count: true, having: { sha256: { _count: { gt: 1 } } } })).map((g) => g.sha256) } } },
+            select: { studentId: true },
+          })
+        ).map((d) => d.studentId),
+      );
+      const reviewers = new Map(
+        (await db.user.findMany({ where: { id: { in: inProgressRows.map((t) => t.claimedById!).filter(Boolean) } }, select: { id: true, name: true, email: true } })).map((u) => [u.id, u.name ?? u.email]),
+      );
+      const now = Date.now();
+      const minutes = (d: Date | null) => (d ? Math.max(0, Math.round((now - d.getTime()) / 60_000)) : 0);
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      const [doneToday, doneWeek] = await Promise.all([
+        db.reviewTask.count({ where: { decidedById: auth.userId, decidedAt: { gte: startOfDay } } }),
+        db.reviewTask.count({ where: { decidedById: auth.userId, decidedAt: { gte: new Date(now - 7 * 86_400_000) } } }),
+      ]);
+      const waiting = waitingRows
+        .sort((a, b) => order.get(a.id)! - order.get(b.id)!)
+        .map((t) => ({
+          id: t.id,
+          type: t.type,
+          risk: t.risk,
+          status: t.status,
+          waitingMinutes: minutes(t.createdAt),
+          dueAt: t.dueAt,
+          student: t.studentId ? (students.get(t.studentId) ?? null) : null,
+          flags: {
+            escalated: t.status === "ESCALATED",
+            escalationNote: r.kind === "TPO" ? t.escalationNote : null,
+            duplicateFile: !!t.studentId && dupes.has(t.studentId),
+            lockExpired: t.status === "CLAIMED",
+          },
+        }));
+      return {
+        reviewer: r.kind,
+        rules: {
+          types: f.types,
+          risks: f.verificationRisks,
+          branches: r.scope.branches ?? null,
+          batches: r.scope.batches ?? null,
+          skipsOwnClass: r.kind === "VOLUNTEER" && !!r.ownStudent,
+          secondChecked: r.kind === "VOLUNTEER",
+        },
+        stats: { waiting: waiting.length, oldestWaitingMinutes: waiting.length ? Math.max(...waiting.map((w) => w.waitingMinutes)) : 0, doneToday, doneWeek, inProgress: inProgressRows.length },
+        waiting,
+        inProgress: inProgressRows.map((t) => ({
+          id: t.id,
+          type: t.type,
+          student: t.studentId ? (students.get(t.studentId) ?? null) : null,
+          // Only the TPO and staff see who is checking; volunteers see that someone is.
+          reviewer: r.kind === "VOLUNTEER" ? null : (reviewers.get(t.claimedById!) ?? null),
+          minutesLeft: t.claimedUntil ? Math.max(0, Math.ceil((t.claimedUntil.getTime() - now) / 60_000)) : 0,
+        })),
+        recent: recentRows.map((t) => ({
+          id: t.id,
+          type: t.type,
+          decision: t.decision,
+          reasonCode: t.reasonCode,
+          decidedAt: t.decidedAt,
+          // What happened after: the student was told, it waits for a second check, or the TPO decides
+          outcome: t.status === "ESCALATED" ? "WITH_TPO" : t.status === "AWAITING_SECOND_CHECK" ? "SECOND_CHECK" : "DONE",
+          student: t.studentId ? (students.get(t.studentId) ?? null) : null,
+        })),
+      };
+    },
+
     /** "Get next task": the most urgent task this person may take, locked to them for 15 minutes. */
     async next(auth: AuthContext) {
       const r = await reviewerOf(auth);
@@ -284,6 +377,29 @@ export function createReviewService(deps: ReviewDeps) {
         return t;
       });
       if (!claimed) return null;
+      return details(claimed);
+    },
+
+    /** Take one particular task from the list (same rules as "next": only tasks this person may do, not held by anyone). */
+    async claim(auth: AuthContext, taskId: string) {
+      const r = await reviewerOf(auth);
+      const held = await heldBy(auth.userId);
+      if (held) {
+        if (held.id === taskId) return details(held);
+        throw new ApiError(409, "TASK_HELD", "Finish or give back the task you have open first.");
+      }
+      const until = new Date(Date.now() + LOCK_MS);
+      const claimed = await db.$transaction(async (tx) => {
+        const rows = await tx.$queryRaw<{ id: string }[]>`
+          SELECT t."id" FROM "ReviewTask" t
+          WHERE ${eligibleSql(r)} AND t."id" = ${taskId}::uuid
+          FOR UPDATE SKIP LOCKED`;
+        if (!rows[0]) return null;
+        const t = await tx.reviewTask.update({ where: { id: taskId }, data: { status: "CLAIMED", claimedById: auth.userId, claimedUntil: until } });
+        await audit(tx, { actorId: auth.userId, action: "review.claimed", entityType: "ReviewTask", entityId: taskId });
+        return t;
+      });
+      if (!claimed) throw new ApiError(409, "TASK_TAKEN", "Someone else is checking this one now. Pick another or take the next task.");
       return details(claimed);
     },
 

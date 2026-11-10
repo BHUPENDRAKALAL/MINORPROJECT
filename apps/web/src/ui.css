@@ -1,0 +1,220 @@
+/* Cyrus UI kit (components/kit.tsx). Foundry tokens only, so light and dark themes both work.
+   Calm surfaces, one accent for actions, colour only in small status dots. */
+
+/* ── Page header ── */
+.ui-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-16) var(--space-24); margin: 0 0 var(--space-24); }
+.ui-head-text { flex: 1 1 420px; min-width: 0; }
+.ui-eyebrow { margin: 0 0 var(--space-4); color: var(--ink-quiet); font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.ui-title { margin: 0; font-family: var(--font-head); font-size: 26px; line-height: 1.2; font-weight: 700; letter-spacing: -0.02em; color: var(--ink); }
+.ui-desc { margin: var(--space-8) 0 0; max-width: 68ch; color: var(--ink-faint); font-size: 14px; line-height: 1.55; }
+.ui-head-actions { display: flex; flex-wrap: wrap; gap: var(--space-8); align-items: center; }
+.ui-muted { color: var(--ink-quiet); font-size: 13px; }
+
+/* ── Tabs ── */
+.ui-tabs { display: flex; gap: var(--space-4); margin: 0 0 var(--space-16); overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--rule); }
+.ui-tabs::-webkit-scrollbar { display: none; }
+.ui-tab { display: inline-flex; align-items: center; gap: var(--space-8); min-height: 38px; margin-bottom: -1px; padding: 0 var(--space-12); color: var(--ink-faint); font: inherit; font-size: 14px; font-weight: 500; white-space: nowrap; background: none; border: 0; border-bottom: 2px solid transparent; border-radius: 0; cursor: pointer; }
+.ui-tab:hover { color: var(--ink); }
+.ui-tab[aria-selected="true"] { color: var(--ink); font-weight: 600; border-bottom-color: var(--ink); }
+.ui-tab-count { min-width: 20px; padding: 1px 7px; color: var(--ink-soft); font-size: 12px; font-weight: 600; text-align: center; background: var(--hover); border-radius: 999px; font-variant-numeric: tabular-nums; }
+.ui-tab[aria-selected="true"] .ui-tab-count { color: var(--paper); background: var(--ink); }
+
+/* ── Tones: the only place status colour comes from ── */
+.tone-neutral { --tone: var(--field); --tone-wash: var(--sunken); --tone-text: var(--ink-soft); }
+.tone-success { --tone: var(--lime-mark); --tone-wash: var(--lime-wash); --tone-text: var(--lime-text); }
+.tone-warning { --tone: var(--sun-mark); --tone-wash: var(--sun-wash); --tone-text: var(--sun-text); }
+.tone-danger { --tone: var(--ember-mark); --tone-wash: var(--ember-wash); --tone-text: var(--ember-text); }
+.tone-info { --tone: var(--azure-mark); --tone-wash: var(--azure-wash); --tone-text: var(--azure-text); }
+.tone-accent { --tone: var(--orchid-mark); --tone-wash: var(--orchid-wash); --tone-text: var(--orchid-text); }
+
+/* ── Badge (status) and Tag (fact) ── */
+.ui-badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px 2px 7px; color: var(--ink-soft); font-size: 12px; line-height: 18px; font-weight: 600; white-space: nowrap; background: var(--panel); border: 1px solid var(--rule-strong); border-radius: 999px; }
+.ui-badge-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--tone); }
+.ui-tag { display: inline-flex; align-items: center; padding: 1px 7px; color: var(--ink-faint); font-size: 12px; line-height: 18px; font-weight: 500; white-space: nowrap; background: var(--sunken); border-radius: 4px; }
+
+/* ── Callout ── */
+.ui-callout { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-12) var(--space-16); margin: 0 0 var(--space-16); padding: var(--space-12) var(--space-16); background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; animation: ui-slide var(--dur-base) var(--ease-out) both; }
+.ui-callout-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--tone); }
+.ui-callout-text { flex: 1 1 260px; min-width: 0; }
+.ui-callout-title { margin: 0; color: var(--ink); font-size: 14px; font-weight: 600; }
+.ui-callout-body { margin: 2px 0 0; color: var(--ink-soft); font-size: 13px; }
+.ui-callout-action .button, .ui-callout-action button { min-height: 32px; }
+
+/* ── List panel with rows ── */
+.ui-rows { margin: 0; padding: 0; list-style: none; background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; }
+.ui-rows > li + li { border-top: 1px solid var(--rule); }
+.ui-row { display: grid; align-items: center; gap: var(--space-8) var(--space-24); padding: 14px var(--space-16); color: var(--ink); text-decoration: none; transition: background-color var(--dur-fast) var(--ease-out); }
+a.ui-row:hover, button.ui-row:hover { background: var(--paper); }
+a.ui-row:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.ui-row.is-dim { opacity: 0.62; }
+.ui-row-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ui-row-title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-8); color: var(--ink); font-size: 15px; font-weight: 600; line-height: 1.35; }
+.ui-row-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--space-8); color: var(--ink-faint); font-size: 13px; }
+.ui-row-sub > * + *::before { content: "·"; margin-right: var(--space-8); color: var(--rule-strong); }
+.ui-row-sub.no-dots > * + *::before { content: none; }
+.ui-col { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 13px; color: var(--ink-soft); }
+.ui-col-label { color: var(--ink-quiet); font-size: 12px; }
+.ui-num { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); }
+.ui-chevron { justify-self: end; color: var(--ink-quiet); font-size: 18px; line-height: 1; }
+.ui-rows-empty { padding: var(--space-32) var(--space-16); color: var(--ink-faint); text-align: center; }
+.ui-rows-head { display: grid; gap: var(--space-24); padding: 10px var(--space-16); color: var(--ink-quiet); font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; background: var(--paper); }
+
+/* ── Steps (rounds progress) ── */
+.ui-steps { display: inline-flex; gap: 3px; }
+.ui-step { width: 18px; height: 6px; border-radius: 3px; background: var(--hover); }
+.ui-step.is-done { background: var(--lime-mark); }
+.ui-step.is-now { background: var(--azure-mark); }
+
+/* ── Two-column page: main + side panel ── */
+.ui-split { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--space-24); align-items: start; }
+.ui-side { display: flex; flex-direction: column; gap: var(--space-16); }
+.ui-aside { padding: var(--space-16); background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; }
+.ui-aside-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-8); margin-bottom: var(--space-12); }
+.ui-aside-title { margin: 0; color: var(--ink); font-size: 13px; font-weight: 700; letter-spacing: 0.02em; }
+.ui-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-12); }
+.ui-stat { display: flex; flex-direction: column; gap: 2px; }
+.ui-stat-label { color: var(--ink-quiet); font-size: 12px; }
+.ui-stat-value { color: var(--ink); font-family: var(--font-head); font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ui-stat-hint { color: var(--ink-faint); font-size: 12px; }
+.ui-steps-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--space-12); counter-reset: step; }
+.ui-steps-list li { display: grid; grid-template-columns: 22px 1fr; gap: var(--space-8); font-size: 13px; color: var(--ink-soft); counter-increment: step; }
+.ui-steps-list li::before { content: counter(step); display: inline-grid; place-items: center; width: 22px; height: 22px; color: var(--ink-soft); font-size: 12px; font-weight: 700; background: var(--sunken); border-radius: 50%; }
+.ui-steps-list strong { display: block; color: var(--ink); font-weight: 600; }
+.ui-mini-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.ui-mini-list li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-8); padding: 8px 0; font-size: 13px; color: var(--ink-soft); }
+.ui-mini-list li + li { border-top: 1px solid var(--rule); }
+.ui-rule-list { margin: 0; padding-left: var(--space-16); display: flex; flex-direction: column; gap: 6px; color: var(--ink-soft); font-size: 13px; }
+
+@media (max-width: 1100px) {
+  .ui-split { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 720px) {
+  .ui-title { font-size: 22px; }
+  .ui-row:not(.sd-row):not(.rq-row) { grid-template-columns: minmax(0, 1fr) !important; gap: var(--space-8); }
+  .ui-row .ui-hide-sm { display: none; }
+  .ui-rows-head { display: none; }
+  .ui-chevron { display: none; }
+}
+
+/* ── Toolbar: tabs on the left, search on the right ── */
+.ui-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-12); margin-bottom: var(--space-16); border-bottom: 1px solid var(--rule); }
+.ui-toolbar .ui-tabs { margin: 0; border-bottom: 0; }
+.ui-search { width: 260px; max-width: 100%; min-height: 34px; margin-bottom: var(--space-8); padding: 6px 12px; font-size: 13px; background: var(--panel); border: 1px solid var(--rule-strong); border-radius: 8px; }
+
+/* Drives list columns: drive · progress · people · timing · status · › */
+.cy-drive-rows .ui-row { grid-template-columns: minmax(0, 2.1fr) minmax(0, 1.7fr) minmax(0, 1fr) minmax(0, 1.2fr) 150px 12px; }
+.cy-drive-rows .ui-badge { justify-self: start; }
+
+/* ── Status bar (one per page at most): panel background, a small dot, one main button, the rest under "More" ── */
+.ui-status { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-12) var(--space-16); margin: 0 0 var(--space-24); padding: 14px var(--space-16); background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; animation: ui-slide var(--dur-base) var(--ease-out) both; }
+.ui-status-dot { width: 8px; height: 8px; flex: none; align-self: flex-start; margin-top: 7px; border-radius: 50%; background: var(--tone); }
+.ui-status-text { flex: 1 1 280px; min-width: 0; }
+.ui-status-title { margin: 0; color: var(--ink); font-size: 14px; font-weight: 600; line-height: 1.45; }
+.ui-status-body { margin: 2px 0 0; color: var(--ink-soft); font-size: 13px; line-height: 1.5; }
+.ui-status-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-8); }
+.ui-status-actions > button, .ui-status-actions > .button { min-height: 32px; }
+.ui-status-ask { flex: 1 1 100%; display: flex; flex-direction: column; gap: var(--space-8); max-width: 560px; padding-left: 24px; animation: ui-slide var(--dur-base) var(--ease-out) both; }
+.ui-status-ask label { color: var(--ink); font-size: 13px; font-weight: 600; }
+
+/* ── "More" menu: a small three-dot button with a floating list ── */
+.ui-more { position: relative; }
+.ui-more-toggle { display: inline-grid; place-items: center; width: 32px; min-height: 32px; padding: 0; color: var(--ink-soft); }
+.ui-more-toggle[aria-expanded="true"] { background: var(--current); color: var(--ink); }
+.ui-more-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; min-width: 196px; display: flex; flex-direction: column; padding: 4px; background: var(--panel); border: 1px solid var(--rule-strong); border-radius: 10px; box-shadow: 0 12px 32px -12px rgb(0 0 0 / 0.28), 0 2px 6px -2px rgb(0 0 0 / 0.12); transform-origin: top right; animation: ui-pop var(--dur-fast) var(--ease-out) both; }
+.ui-more-item { display: flex; align-items: center; justify-content: flex-start; width: 100%; min-height: 32px; padding: 0 10px; color: var(--ink); font-size: 13px; font-weight: 500; text-align: left; text-decoration: none; background: none; border: 0; border-radius: 6px; }
+.ui-more-item:hover, .ui-more-item:focus-visible { background: var(--sunken); }
+.ui-more-item:active { scale: 1; }
+.ui-more-item.is-danger { color: var(--ember-text); }
+/* A thin line above the first risky item, when safe ones come before it */
+.ui-more-item:not(.is-danger) + .ui-more-item.is-danger { position: relative; margin-top: 5px; }
+.ui-more-item:not(.is-danger) + .ui-more-item.is-danger::before { content: ""; position: absolute; left: -4px; right: -4px; top: -3px; border-top: 1px solid var(--rule); }
+
+/* ── Account menu (bottom of the side panel): a floating card above the name, never clipped ── */
+.user-menu-panel { gap: 0; padding: 4px; min-width: 248px; border-radius: 12px; box-shadow: 0 16px 40px -16px rgb(0 0 0 / 0.3), 0 2px 8px -2px rgb(0 0 0 / 0.12); z-index: 30; transform-origin: bottom left; animation: ui-pop var(--dur-fast) var(--ease-out) both; }
+.user-menu-top .user-menu-panel { transform-origin: top right; }
+.um-head { display: flex; align-items: center; gap: 10px; padding: 10px 10px 12px; }
+.um-who { display: flex; flex-direction: column; min-width: 0; }
+.um-name { color: var(--ink); font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.um-email { color: var(--ink-faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.um-role { margin-top: 2px; color: var(--ink-quiet); font-size: 12px; }
+.um-group { display: flex; flex-direction: column; padding: 4px 0; border-top: 1px solid var(--rule); }
+.um-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 34px; padding: 0 10px; color: var(--ink); font-size: 13px; font-weight: 500; text-align: left; text-decoration: none; background: none; border: 0; border-radius: 6px; transition: background-color var(--dur-fast) var(--ease-out); }
+.um-item:hover, .um-item:focus-visible { background: var(--sunken); }
+.um-item:active { scale: 1; }
+.um-item .icon { color: var(--ink-faint); }
+.um-item > span:first-of-type { flex: 1; }
+.um-switch { position: relative; width: 28px; height: 16px; flex: none; border-radius: 99px; background: var(--rule-strong); transition: background-color var(--dur-base) var(--ease-out); }
+.um-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--panel); box-shadow: 0 1px 2px rgb(0 0 0 / 0.2); transition: translate var(--dur-base) var(--ease-out); }
+.um-switch.is-on { background: var(--primary); }
+.um-switch.is-on::after { translate: 12px 0; }
+.um-tag { padding: 1px 6px; color: var(--ink-faint); font-size: 11px; border: 1px solid var(--rule); border-radius: 99px; }
+.um-danger, .um-danger .icon { color: var(--ember-text); }
+
+/* ── Account page ── */
+.ui-account-card { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-16); margin: 0 0 var(--space-24); padding: var(--space-16) 20px; background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; }
+.ui-account-avatar .avatar { width: 48px; height: 48px; font-size: 18px; }
+.ui-account-who { flex: 1 1 220px; min-width: 0; }
+.ui-account-name { margin: 0; color: var(--ink); font-size: 17px; font-weight: 600; }
+.ui-account-meta { display: flex; flex-wrap: wrap; gap: 2px var(--space-8); margin: 2px 0 0; color: var(--ink-faint); font-size: 13px; }
+.ui-account-roles { display: flex; flex-wrap: wrap; gap: 6px; }
+.ui-setting { display: grid; grid-template-columns: minmax(180px, 280px) minmax(0, 1fr); gap: var(--space-12) 32px; padding: var(--space-24) 0; border-top: 1px solid var(--rule); }
+.ui-setting:first-of-type { border-top: 0; }
+.ui-setting-title { margin: 0; color: var(--ink); font-size: 15px; font-weight: 600; }
+.ui-setting-desc { margin: 4px 0 0; color: var(--ink-faint); font-size: 13px; line-height: 1.5; }
+.ui-setting-body { min-width: 0; max-width: 520px; }
+@media (max-width: 760px) { .ui-setting { grid-template-columns: 1fr; } }
+.ui-form { display: flex; flex-direction: column; gap: var(--space-12); }
+.ui-form-inline { flex-direction: row; flex-wrap: wrap; align-items: flex-end; }
+.ui-form-inline > :first-child { flex: 1 1 240px; }
+.ui-form-row { display: flex; flex-wrap: wrap; gap: var(--space-12); }
+.ui-ok { margin: var(--space-8) 0 0; color: var(--lime-text); font-size: 13px; animation: ui-fade var(--dur-base) var(--ease-out) both; }
+.ui-readonly { margin: 0; padding: 8px 12px; color: var(--ink-soft); font-size: 14px; background: var(--sunken); border-radius: 8px; }
+.ui-muted { color: var(--ink-faint); font-weight: 400; }
+.ui-gap-top { margin-top: var(--space-12); }
+.ui-role-list { margin: 0; padding: 0; list-style: none; border: 1px solid var(--rule); border-radius: 10px; }
+.ui-role-list > li { display: flex; align-items: center; gap: var(--space-12); padding: 12px 14px; }
+.ui-role-list > li + li { border-top: 1px solid var(--rule); }
+.ui-role-list > li > div { flex: 1; min-width: 0; }
+.ui-role-name { margin: 0; color: var(--ink); font-size: 14px; font-weight: 600; }
+.ui-role-help { margin: 2px 0 0; color: var(--ink-faint); font-size: 13px; }
+.ui-segmented { display: inline-flex; padding: 3px; gap: 2px; background: var(--sunken); border-radius: 9px; }
+.ui-segmented > button { min-height: 30px; padding: 0 14px; color: var(--ink-soft); font-size: 13px; background: none; border: 0; border-radius: 7px; transition: background-color var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out); }
+.ui-segmented > button[aria-checked="true"] { color: var(--ink); background: var(--panel); box-shadow: 0 1px 2px rgb(0 0 0 / 0.12); }
+.ui-danger-button { color: var(--ember-text); background: var(--panel); border-color: var(--rule-strong); }
+.ui-danger-button:hover { color: var(--ember-text); background: var(--ember-wash); border-color: color-mix(in srgb, var(--ember-mark) 40%, transparent); }
+
+/* ── Motion: pages fade up, rows follow one after another, menus pop, nothing jumps ── */
+@keyframes ui-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ui-rise { from { opacity: 0; translate: 0 6px; } to { opacity: 1; translate: 0 0; } }
+@keyframes ui-slide { from { opacity: 0; translate: 0 -4px; } to { opacity: 1; translate: 0 0; } }
+@keyframes ui-pop { from { opacity: 0; scale: 0.97; } to { opacity: 1; scale: 1; } }
+.ui-page { animation: ui-rise var(--dur-slow) var(--ease-out) both; }
+.ui-rows > li { animation: ui-rise var(--dur-base) var(--ease-out) both; }
+.ui-rows > li:nth-child(2) { animation-delay: 30ms; }
+.ui-rows > li:nth-child(3) { animation-delay: 60ms; }
+.ui-rows > li:nth-child(4) { animation-delay: 90ms; }
+.ui-rows > li:nth-child(5) { animation-delay: 120ms; }
+.ui-rows > li:nth-child(n + 6) { animation-delay: 150ms; }
+.ui-tab { transition: color var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out); }
+@media (prefers-reduced-motion: reduce) {
+  .ui-page, .ui-rows > li, .ui-status, .ui-status-ask, .ui-callout, .ui-more-menu, .user-menu-panel, .ui-ok { animation: none; }
+  .um-switch, .um-switch::after, .ui-segmented > button { transition: none; }
+}
+
+/* ── Toasts (Sonner): a small panel card in the corner, app fonts and colours ── */
+[data-sonner-toaster] {
+  --normal-bg: var(--panel);
+  --normal-border: var(--rule-strong);
+  --normal-text: var(--ink);
+  --border-radius: 10px;
+  --width: 360px;
+  font-family: inherit;
+}
+[data-sonner-toast].cy-toast { gap: 10px; padding: 12px 14px; font-size: 13px; box-shadow: 0 16px 40px -18px rgb(0 0 0 / 0.32), 0 2px 8px -2px rgb(0 0 0 / 0.1); }
+[data-sonner-toast].cy-toast [data-title] { color: var(--ink); font-size: 13px; font-weight: 600; line-height: 1.4; }
+[data-sonner-toast].cy-toast [data-description] { color: var(--ink-soft); font-size: 13px; line-height: 1.45; }
+[data-sonner-toast].cy-toast [data-icon] { color: var(--lime-mark); }
+[data-sonner-toast].cy-toast[data-type="error"] [data-icon] { color: var(--ember-mark); }
+[data-sonner-toast].cy-toast [data-button] { height: 28px; padding: 0 10px; color: var(--primary-ink); font-size: 12px; font-weight: 600; background: var(--primary); border-radius: 6px; }
+[data-sonner-toast].cy-toast [data-close-button] { color: var(--ink-faint); background: var(--panel); border-color: var(--rule); }
+[data-sonner-toast].cy-toast [data-close-button]:hover { color: var(--ink); background: var(--sunken); }

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useApiForm } from "../../components/useApiForm";
-import { Alert, EmptyState, Tile } from "../../components/ui";
+import { FilterTabs, PageHeader } from "../../components/kit";
+import { Alert } from "../../components/ui";
 import { notificationsApi, type NotificationItem } from "../../lib/api";
 import { useTitle } from "../../lib/useTitle";
 import { announceUnread } from "../../app/useUnread";
@@ -55,53 +56,78 @@ export default function Notifications() {
       if (n.path) navigate(n.path);
     });
 
+  const [tab, setTab] = useState<"all" | "unread">("all");
+  const shown = (items ?? []).filter((n) => tab === "all" || !n.readAt);
+  // Newest first, in three plain groups so a long list stays easy to scan.
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const weekAgo = startOfToday.getTime() - 6 * 86_400_000;
+  const groups: { title: string; items: NotificationItem[] }[] = [
+    { title: "Today", items: shown.filter((n) => new Date(n.createdAt).getTime() >= startOfToday.getTime()) },
+    { title: "This week", items: shown.filter((n) => { const t = new Date(n.createdAt).getTime(); return t < startOfToday.getTime() && t >= weekAgo; }) },
+    { title: "Older", items: shown.filter((n) => new Date(n.createdAt).getTime() < weekAgo) },
+  ].filter((g) => g.items.length);
+
   return (
     <>
-      <header className="page-head">
-        <div className="section-head">
-          <Tile icon="needs" family="sun" />
-          <h1 className="title">Notifications</h1>
-          {unread > 0 && <span className="pill pill-needs">{unread} new</span>}
-          {unread > 0 && (
-            <button type="button" className="quiet cy-head-action" onClick={() => void form.run(() => markRead())}>
+      <PageHeader
+        title="Notifications"
+        description="Invites, round results, your turn in an interview line and offers. Open one to go to the page it's about."
+        actions={
+          unread > 0 && (
+            <button type="button" onClick={() => void form.run(() => markRead())}>
               Mark all as read
             </button>
-          )}
-        </div>
-      </header>
+          )
+        }
+      />
       {form.error && <Alert>{form.error}</Alert>}
-      {items && !items.length && (
-        <EmptyState sprite="smith" family="sun">
-          Nothing yet. Invites, round results, your turn in an interview line and offers will show up here.
-        </EmptyState>
+      {items && (
+        <FilterTabs
+          label="Show"
+          value={tab}
+          onChange={setTab}
+          items={[
+            { key: "all", label: "All", count: items.length },
+            { key: "unread", label: "Unread", count: unread },
+          ]}
+        />
       )}
-      {items && items.length > 0 && (
-        <ul className="cy-notes-list">
-          {items.map((n) => (
-            <li key={n.id} className={n.readAt ? "" : "is-unread"}>
-              <button type="button" className="cy-note" onClick={() => open(n)}>
-                <span className="cy-note-dot" aria-hidden="true" />
-                <span className="cy-note-main">
-                  <span className="cy-note-title">
-                    {!n.readAt && <span className="hidden">Unread: </span>}
-                    {n.title}
+      {items && !shown.length && (
+        <div className="rq-empty-state">
+          <p className="rq-empty-title">{tab === "unread" ? "You're all caught up" : "Nothing yet"}</p>
+          <p>{tab === "unread" ? "No unread notifications." : "Invites, round results, your turn in an interview line and offers will show up here."}</p>
+        </div>
+      )}
+      {groups.map((g) => (
+        <section key={g.title} className="nt-group" aria-label={g.title}>
+          <h2 className="nt-group-title">{g.title}</h2>
+          <ul className="ui-rows cy-notes-list">
+            {g.items.map((n) => (
+              <li key={n.id} className={n.readAt ? "" : "is-unread"}>
+                <button type="button" className="ui-row nt-row cy-note" onClick={() => open(n)}>
+                  <span className="nt-dot" aria-hidden="true" />
+                  <span className="ui-row-main">
+                    <span className="ui-row-title nt-title">
+                      {!n.readAt && <span className="hidden">Unread: </span>}
+                      {n.title}
+                    </span>
+                    <span className="nt-body">{n.body}</span>
                   </span>
-                  <span className="small cy-note-body">{n.body}</span>
-                </span>
-                <span className="cy-note-meta faint small">
-                  <span>{CHANNEL[n.channel]}</span>
-                  <span>{ago(n.createdAt)}</span>
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {more && items && (
-        <p className="buttons">
+                  <span className="nt-meta">
+                    <span className="ui-tag">{CHANNEL[n.channel]}</span>
+                    <span className="nt-time">{ago(n.createdAt)}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+      {more && items && tab === "all" && (
+        <div className="nt-more">
           <button
             type="button"
-            className="quiet"
             onClick={() =>
               void form.run(async () => {
                 const r = await notificationsApi.list(items[items.length - 1]!.createdAt);
@@ -112,7 +138,7 @@ export default function Notifications() {
           >
             Show older
           </button>
-        </p>
+        </div>
       )}
     </>
   );

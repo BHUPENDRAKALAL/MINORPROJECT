@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { Field } from "../../components/form";
+import { Field, PasswordMeter } from "../../components/form";
 import { useApiForm } from "../../components/useApiForm";
 import { Alert } from "../../components/ui";
 import { authApi } from "../../lib/api";
-import { PASSWORD_HINT, passwordProblem } from "../../lib/constants";
+import { passwordProblem } from "../../lib/constants";
 import { AuthLayout, ResultPanel } from "./AuthLayout";
 
 export function ForgotPassword() {
@@ -22,11 +22,11 @@ export function ForgotPassword() {
   }
 
   return (
-    <AuthLayout title="Forgot your password?" lead="Enter your email. If it has an account, we'll send a 6-digit code to set a new password." sprite="ask" family="sun">
+    <AuthLayout title="Forgot your password?" lead="Enter your email. If it has an account, we'll send a 6-digit code to set a new password." sprite="ask">
       {form.error && <Alert>{form.error}</Alert>}
       <form className="stack" onSubmit={onSubmit} noValidate>
-        <Field label="Email" type="email" autoComplete="email" autoCapitalize="none" value={email} onChange={(e) => setEmail(e.target.value)} error={form.fieldErrors.email} />
-        <button className="primary button-wide" type="submit" disabled={form.busy}>
+        <Field label="Email" type="email" placeholder="name@example.com" autoComplete="email" autoCapitalize="none" value={email} onChange={(e) => setEmail(e.target.value)} error={form.fieldErrors.email} />
+        <button className="primary button-wide" type="submit" disabled={form.busy} aria-busy={form.busy}>
           {form.busy ? "Sending…" : "Send code"}
         </button>
       </form>
@@ -84,24 +84,24 @@ export function ResetPassword() {
       title="Set a new password"
       lead={params.get("sent") ? "If that email has an account, a 6-digit code is on its way. Enter it below with your new password." : "Enter the code from your email and choose a new password."}
       sprite="smith"
-      family="sun"
     >
       {form.error && <Alert>{form.error}</Alert>}
       <form className="stack" onSubmit={onSubmit} noValidate>
-        <Field label="Email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} error={form.fieldErrors.email} />
+        <Field label="Email" type="email" placeholder="name@example.com" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} error={form.fieldErrors.email} />
         <Field
           label="6-digit code"
           className="code-input"
           inputMode="numeric"
           autoComplete="one-time-code"
           maxLength={6}
+          placeholder="123456"
           value={code}
           onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
           error={form.fieldErrors.code}
         />
-        <Field label="New password" type="password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} error={form.fieldErrors.newPassword} hint={PASSWORD_HINT} />
-        <Field label="Type it again" type="password" autoComplete="new-password" value={pw2} onChange={(e) => setPw2(e.target.value)} error={form.fieldErrors.confirm} />
-        <button className="primary button-wide" type="submit" disabled={form.busy}>
+        <Field label="New password" type="password" placeholder="At least 8 characters" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} error={form.fieldErrors.newPassword} hint={<PasswordMeter value={pw} />} />
+        <Field label="Type it again" type="password" placeholder="Same as above" autoComplete="new-password" value={pw2} onChange={(e) => setPw2(e.target.value)} error={form.fieldErrors.confirm} />
+        <button className="primary button-wide" type="submit" disabled={form.busy} aria-busy={form.busy}>
           {form.busy ? "Saving…" : "Save new password"}
         </button>
       </form>

@@ -280,6 +280,7 @@ export const authApi = {
 
 export const meApi = {
   get: () => api<Me>("/me"),
+  updateMe: (body: { name: string }) => api<Me>("/me", { method: "PATCH", body }),
   changePassword: (currentPassword: string, newPassword: string) =>
     api<void>("/me/password", { method: "PATCH", body: { currentPassword, newPassword } }),
 };
@@ -326,7 +327,8 @@ export interface StudentDocument {
   semester: number | null;
   status: string;
   flagged: boolean;
-  file: { id: string; originalName: string; mimeType: string; sizeBytes: number; scanStatus: string };
+  /** scanNote: why the file was refused (shown to the student), or what the cleaning removed */
+  file: { id: string; originalName: string; mimeType: string; sizeBytes: number; scanStatus: string; scanNote: string | null };
 }
 
 export interface StudentProfileView {
@@ -385,6 +387,33 @@ export interface ReviewSummary {
   current: { id: string; type: string; claimedUntil: string } | null;
 }
 
+export interface QueueStudent {
+  id: string;
+  name: string;
+  rollNo: string;
+  branch: string;
+  batch: number;
+}
+
+/** GET /work/queue: what is waiting, who is checking what, and this reviewer's recent decisions. */
+export interface ReviewQueueOverview {
+  reviewer: "TPO" | "STAFF" | "VOLUNTEER";
+  rules: { types: string[]; risks: string[] | null; branches: string[] | null; batches: number[] | null; skipsOwnClass: boolean; secondChecked: boolean };
+  stats: { waiting: number; oldestWaitingMinutes: number; doneToday: number; doneWeek: number; inProgress: number };
+  waiting: {
+    id: string;
+    type: string;
+    risk: "LOW" | "MEDIUM" | "HIGH";
+    status: string;
+    waitingMinutes: number;
+    dueAt: string | null;
+    student: QueueStudent | null;
+    flags: { escalated: boolean; escalationNote: string | null; duplicateFile: boolean; lockExpired: boolean };
+  }[];
+  inProgress: { id: string; type: string; student: QueueStudent | null; reviewer: string | null; minutesLeft: number }[];
+  recent: { id: string; type: string; decision: "APPROVE" | "REJECT" | null; reasonCode: string | null; decidedAt: string | null; outcome: "WITH_TPO" | "SECOND_CHECK" | "DONE"; student: QueueStudent | null }[];
+}
+
 export interface ReviewDoc {
   id: string;
   type: StudentDocument["type"];
@@ -410,14 +439,32 @@ export interface ReviewTaskView {
   subject?: ReviewTaskView;
 }
 
+/** GET /admin/overview: the placement office's numbers (counts only). */
+export interface OfficeOverview {
+  students: { total: number; incomplete: number; pending: number; verified: number; rejected: number; placed: number };
+  drives: Record<string, number>;
+  companies: number;
+  review: { waiting: number; byType: Record<string, number>; escalated: number; oldestWaitingMinutes: number };
+  offers: Record<string, number>;
+  feedbackToCheck: number;
+  pendingDrives: { id: string; roleTitle: string; company: string; waitingSince: string }[];
+  upcomingRounds: { id: string; title: string; startsAt: string; where: string | null; driveId: string; roleTitle: string; company: string }[];
+}
+
+export const overviewApi = {
+  get: () => api<OfficeOverview>("/admin/overview"),
+};
+
 export const workApi = {
   summary: () => api<ReviewSummary>("/work/summary"),
+  queue: () => api<ReviewQueueOverview>("/work/queue"),
   pledge: () => api<{ pledgeAcceptedAt: string }>("/work/onboarding/pledge", { method: "POST" }),
   next: async () => {
     const r = await api<ReviewTaskView | { task: null }>("/work/next", { method: "POST" });
     return "task" in r && r.task === null ? null : (r as ReviewTaskView);
   },
   get: (id: string) => api<ReviewTaskView>(`/work/tasks/${id}`),
+  claim: (id: string) => api<ReviewTaskView>(`/work/tasks/${id}/claim`, { method: "POST" }),
   decide: (id: string, body: { decision: "APPROVE" | "REJECT"; reasonCode?: string | null; note?: string | null }) =>
     api<{ outcome: "closed" | "sent_for_second_check" | "escalated" }>(`/work/tasks/${id}/decision`, { method: "POST", body }),
   release: (id: string) => api<{ released: boolean }>(`/work/tasks/${id}/release`, { method: "POST" }),
@@ -515,8 +562,19 @@ export interface DriveListItem {
   status: DriveStatus;
   optInDeadline: string | null;
   rounds: number;
+  roundsDone: number;
+  currentRound: string | null;
+  nextRound: { title: string | null; startsAt: string | null };
+  /** Ever invited (not taken back) */
   invited: number;
+  /** Invited, not answered yet */
+  awaiting: number;
+  /** Joined (still in, or already selected) */
   joined: number;
+  /** Joined and still in the rounds */
+  active: number;
+  selected: number;
+  placed: number;
   updatedAt: string;
 }
 

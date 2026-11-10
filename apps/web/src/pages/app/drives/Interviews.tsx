@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import { Field } from "../../../components/form";
+import { PageHeader } from "../../../components/kit";
 import { useApiForm } from "../../../components/useApiForm";
-import { Alert, EmptyState, Saved, Tile } from "../../../components/ui";
+import { Alert, Saved } from "../../../components/ui";
 import { interviewsApi, type FeedbackItem, type PanelPerson, type PanelSummary } from "../../../lib/api";
 import { useTitle } from "../../../lib/useTitle";
 import { when } from "./format";
@@ -52,12 +53,19 @@ export function PanelsSetup({ roundId, running, over }: { roundId: string; runni
   const inLine = panels.reduce((a, p) => a + p.counts.total, 0);
 
   return (
-    <section className="cy-section">
-      <div className="section-head">
-        <h2>Interview panels</h2>
-        <span className="pill">{panels.length}</span>
+    <section className="rq-card">
+      <div className="rq-card-head rp-card-head">
+        <div>
+          <h2>
+            Interview panels <span className="ui-tab-count">{panels.length}</span>
+          </h2>
+          <p>
+            Each panel interviews its own line of students. "Make the interview lines" splits the round's students evenly
+            {running ? " (only those who checked in, if check-in was used)" : ""}. Interviewers open their panel from "My panels".
+          </p>
+        </div>
         {running && panels.length > 0 && (
-          <div className="cy-round-tools">
+          <div className="rp-tools cy-round-tools">
             <button
               type="button"
               className="primary"
@@ -77,50 +85,46 @@ export function PanelsSetup({ roundId, running, over }: { roundId: string; runni
       </div>
       {form.error && <Alert>{form.error}</Alert>}
       {msg && <Saved>{msg}</Saved>}
-      <p className="faint small">
-        Each panel interviews its own line of students. "Make the interview lines" splits the round's students evenly
-        {running ? " (only those who checked in, if check-in was used)" : ""}. Interviewers open their panel from "My panels" after signing in.
-      </p>
 
       {panels.length > 0 && (
-        <ul className="cy-cards">
+        <ul className="rp-panels">
           {panels.map((p) => (
-            <li key={p.id}>
-              <div className="panel cy-card">
-                <span className="cy-card-top">
-                  <strong className="cy-card-title">{p.name}</strong>
-                  {p.location && <span className="faint small">{p.location}</span>}
+            <li key={p.id} className="cy-card">
+              <span className="rp-panel-main">
+                <span className="rp-panel-name">
+                  {p.name}
+                  {p.location && <span className="rp-panel-sub"> · {p.location}</span>}
                 </span>
-                <span className="small">{p.members.length ? p.members.map((m) => m.name ?? m.email).join(", ") : "No interviewer added (HR can run it)"}</span>
-                <span className="cy-card-figures small">
+                <span className="rp-panel-sub">{p.members.length ? p.members.map((m) => m.name ?? m.email).join(", ") : "No interviewer added (HR can run it)"}</span>
+              </span>
+                <span className="rp-panel-figs">
                   <span>{p.counts.waiting} waiting</span>
                   <span>{p.counts.live ? "1 in the room" : "room free"}</span>
                   <span>{p.counts.done} done</span>
                   {p.counts.absent > 0 && <span>{p.counts.absent} absent</span>}
                   <span>~{p.avgMinutes} min each</span>
                 </span>
-                <span className="buttons">
-                  <Link className="button" to={`/panel/${p.id}`}>
+                <span className="rp-panel-actions">
+                  <Link className="button small" to={`/panel/${p.id}`}>
                     Open panel
                   </Link>
                   {p.counts.total === 0 && !over && (
-                    <button type="button" className="quiet" onClick={() => void form.run(async () => setPanels((await interviewsApi.removePanel(p.id)).panels))}>
+                    <button type="button" className="small sp-remove" onClick={() => void form.run(async () => setPanels((await interviewsApi.removePanel(p.id)).panels))}>
                       Remove
                     </button>
                   )}
                 </span>
-              </div>
             </li>
           ))}
         </ul>
       )}
 
       {!over && (
-        <form className="panel stack cy-wide cy-add-panel" onSubmit={add} noValidate>
+        <form className="form rp-add cy-add-panel" onSubmit={add} noValidate>
           <p className="cy-h3">Add a panel</p>
-          <div className="cy-grid">
-            <Field label="Panel name" value={name} placeholder={`Panel ${String.fromCharCode(65 + panels.length)}`} onChange={(e) => setName(e.target.value)} error={form.fieldErrors.name} />
-            <Field label="Room" value={location} placeholder="e.g. Room 204" onChange={(e) => setLocation(e.target.value)} />
+          <div className="form-row">
+            <Field label="Panel name" size="md" value={name} placeholder={`Panel ${String.fromCharCode(65 + panels.length)}`} onChange={(e) => setName(e.target.value)} error={form.fieldErrors.name} />
+            <Field label="Room" size="md" optional value={location} placeholder="e.g. Room 204" onChange={(e) => setLocation(e.target.value)} />
           </div>
           <fieldset className="cy-fieldset">
             <legend>Interviewers</legend>
@@ -138,7 +142,7 @@ export function PanelsSetup({ roundId, running, over }: { roundId: string; runni
             )}
           </fieldset>
           <div className="buttons">
-            <button type="submit" disabled={form.busy}>
+            <button className="primary" type="submit" disabled={form.busy}>
               Add panel
             </button>
           </div>
@@ -157,39 +161,41 @@ export function MyPanels() {
   useEffect(() => void run(async () => setData(await interviewsApi.myPanels())), [run]);
   return (
     <>
-      <header className="page-head">
-        <div className="section-head">
-          <Tile icon="panel" family="orchid" />
-          <h1 className="title">My panels</h1>
-        </div>
-        <p className="lead">Panels you sit on. Open one on interview day to call students and write notes.</p>
-      </header>
+      <PageHeader title="My panels" description="Panels you sit on. Open one on interview day to call students and write notes." />
       {form.error && <Alert>{form.error}</Alert>}
       {data && !data.panels.length && (
-        <EmptyState sprite="reviewer" family="orchid">
-          You're not on a panel right now. HR adds you to a panel before interview day.
-        </EmptyState>
+        <div className="rq-empty-state">
+          <p className="rq-empty-title">You're not on a panel right now</p>
+          <p>HR adds you to a panel before interview day.</p>
+        </div>
       )}
       {data && data.panels.length > 0 && (
-        <ul className="cy-cards">
+        <ul className="ui-rows">
           {data.panels.map((p) => (
             <li key={p.id}>
-              <Link className="panel cy-card" to={`/panel/${p.id}`}>
-                <span className="cy-card-top">
-                  <span className="faint small">{p.round.company}</span>
-                  <span className={`stage ${p.round.status === "SCHEDULED" ? "waiting" : "working fam-azure"}`}>{p.round.status === "SCHEDULED" ? "Not started" : "Running"}</span>
+              <Link className="ui-row sd-row ps-row" to={`/panel/${p.id}`}>
+                <span className="sd-logo" aria-hidden="true">
+                  {p.name.replace(/^Panel\s*/i, "").slice(0, 1) || "P"}
                 </span>
-                <strong className="cy-card-title">
-                  {p.name}
-                  {p.location ? ` · ${p.location}` : ""}
-                </strong>
-                <span className="small">
-                  {p.round.roleTitle} · {p.round.title} · {when(p.round.startsAt)}
+                <span className="ui-row-main">
+                  <span className="ui-row-title">
+                    {p.name}
+                    {p.location ? ` · ${p.location}` : ""}
+                  </span>
+                  <span className="ui-row-sub">
+                    <span>{p.round.company}</span>
+                    <span>{p.round.roleTitle}</span>
+                    <span>{p.round.title}</span>
+                    <span>{when(p.round.startsAt)}</span>
+                  </span>
                 </span>
-                <span className="cy-card-figures small">
-                  <span>{p.waiting} waiting</span>
-                  <span>{p.done} done</span>
+                <span className="sd-next">
+                  {p.waiting} waiting · {p.done} done
                 </span>
+                <span className={`stage ${p.round.status === "SCHEDULED" ? "idle" : "working fam-azure"}`}>{p.round.status === "SCHEDULED" ? "Not started" : "Running"}</span>
+                <svg className="ui-chevron" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                  <path d="M6 3.5L10.5 8 6 12.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </Link>
             </li>
           ))}
@@ -227,65 +233,64 @@ export function CompanyTeam() {
 
   return (
     <>
-      <header className="page-head">
-        <h1 className="title">Team</h1>
-        <p className="lead">{data ? `${data.company}: people` : "People"} who can sit on interview panels.</p>
-      </header>
-      <section className="cy-section">
-        <div className="section-head">
-          <h2>Invite an interviewer</h2>
+      <PageHeader title="Team" description={`${data ? `${data.company}: people` : "People"} who can sit on interview panels.`} />
+      <div className="ui-split rq-split">
+        <div className="rq-main">
+          <section className="rq-card">
+            <div className="rq-card-head">
+              <h2>Members</h2>
+              <p>HR runs drives; interviewers only see the panels you add them to.</p>
+            </div>
+            {list.error && <Alert>{list.error}</Alert>}
+            {data && (
+              <div className="scroll">
+                <table className="cy-table dd-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Person</th>
+                      <th scope="col">Role</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.members.map((m) => (
+                      <tr key={m.id}>
+                        <td>
+                          <span className="dd-name">{m.name ?? m.email}</span>
+                          <span className="dd-roll">{m.email}</span>
+                        </td>
+                        <td>{m.role === "HR" ? "HR" : "Interviewer"}</td>
+                      </tr>
+                    ))}
+                    {data.invites.map((i) => (
+                      <tr key={i.id}>
+                        <td>
+                          <span className="dd-name">{i.email}</span>
+                          <span className="stage waiting tm-sent">Invite sent</span>
+                        </td>
+                        <td>{i.role === "INTERVIEWER" ? "Interviewer" : "HR"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
         </div>
-        <form className="stack panel cy-wide" onSubmit={invite} noValidate>
-          {sent && <Saved>{sent}</Saved>}
-          {form.error && form.errorCode !== "LOCAL_VALIDATION" && <Alert>{form.error}</Alert>}
-          <Field label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} error={form.fieldErrors.email} hint="A colleague from your company. They can only run panels you add them to." />
-          <div className="buttons">
-            <button className="primary" type="submit" disabled={form.busy}>
-              Send invite
-            </button>
-          </div>
-        </form>
-      </section>
-      <section className="cy-section">
-        <div className="section-head">
-          <h2>Members</h2>
+        <div className="rq-side">
+          <section className="rq-decide tm-invite" aria-labelledby="invite-iv">
+            <h2 id="invite-iv">Invite an interviewer</h2>
+            <p className="rq-decide-help">A colleague from your company. They set a password from the email link and can only run panels you add them to.</p>
+            <form className="form tm-form" onSubmit={invite} noValidate>
+              {sent && <Saved>{sent}</Saved>}
+              {form.error && form.errorCode !== "LOCAL_VALIDATION" && <Alert>{form.error}</Alert>}
+              <Field label="Email" placeholder="name@company.com" type="email" value={email} onChange={(e) => setEmail(e.target.value)} error={form.fieldErrors.email} />
+              <button className="primary rq-wide" type="submit" disabled={form.busy}>
+                Send invite
+              </button>
+            </form>
+          </section>
         </div>
-        {list.error && <Alert>{list.error}</Alert>}
-        {data && (
-          <div className="scroll">
-            <table className="cy-table">
-              <thead>
-                <tr>
-                  <th scope="col">Person</th>
-                  <th scope="col">Role</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.members.map((m) => (
-                  <tr key={m.id}>
-                    <td>
-                      {m.name ?? m.email}
-                      <br />
-                      <span className="faint small">{m.email}</span>
-                    </td>
-                    <td>{m.role === "HR" ? "HR" : "Interviewer"}</td>
-                  </tr>
-                ))}
-                {data.invites.map((i) => (
-                  <tr key={i.id}>
-                    <td>
-                      {i.email}
-                      <br />
-                      <span className="stage waiting">Invite sent</span>
-                    </td>
-                    <td>{i.role === "INTERVIEWER" ? "Interviewer" : "HR"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      </div>
     </>
   );
 }

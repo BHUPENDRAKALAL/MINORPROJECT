@@ -52,7 +52,8 @@ test("HR sends an offer letter, the student accepts and is placed, the TPO close
   await signIn(page, demo("tpo"));
   await page.goto("/office/drives");
   await page.getByRole("link", { name: /Billing Analyst/ }).click();
-  await page.getByRole("button", { name: "Close drive" }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: "Close drive" }).click();
   await expect(page.getByText("Drive closed.")).toBeVisible();
   await expect(page.locator(".banner-title", { hasText: "Closed" })).toBeVisible();
 });

@@ -55,6 +55,30 @@ services:
       - "1025:1025"   # SMTP
       - "8025:8025"   # web inbox
 
+  # Rebuilds uploaded PDFs and images so nothing hidden in them survives (apps/api/src/sanitizer).
+  # Locked down on purpose: no secrets, read-only files, not root, no extra powers, small limits.
+  # It exits by itself after a short while of work and Docker starts a pristine one.
+  sanitizer:
+    build:
+      context: .
+      dockerfile: infra/sanitizer/Dockerfile
+    restart: always
+    read_only: true
+    tmpfs:
+      - /tmp
+    user: node
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    pids_limit: 64
+    cpus: 1
+    ports:
+      # Only this machine can reach it (the worker runs on the host in development).
+      # When everything runs in containers, drop the port and put it on an internal-only network.
+      - "127.0.0.1:4010:4010"
+
 volumes:
   pgdata:
   redisdata:

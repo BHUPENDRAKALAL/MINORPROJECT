@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 import { RESULT_LABELS, ROUND_KINDS, type ResultValue } from "@cyrus/shared";
 import { useAuth } from "../../../app/useAuth";
 import { Field } from "../../../components/form";
 import { useApiForm } from "../../../components/useApiForm";
-import { Alert, PageTitle, Saved } from "../../../components/ui";
+import { Alert, Saved } from "../../../components/ui";
 import { roundsApi, type RoundStudent, type RoundView } from "../../../lib/api";
 import { useTitle } from "../../../lib/useTitle";
 import { drivePaths, when } from "./format";
@@ -14,7 +14,7 @@ import { interviewsApi, type PanelOpinion } from "../../../lib/api";
 import { KeyPointsSummary } from "./KeyPoints";
 
 const ROUND_STATUS: Record<RoundView["status"], [string, string]> = {
-  SCHEDULED: ["Not started", "waiting"],
+  SCHEDULED: ["Not started", "idle"],
   IN_PROGRESS: ["Running", "working fam-azure"],
   RESULTS_PENDING: ["Results being entered", "working fam-sun"],
   RESULTS_PUBLISHED: ["Results published", "done fam-lime"],
@@ -60,6 +60,37 @@ export default function RoundPage() {
     });
 
   const [label, tone] = ROUND_STATUS[round.status];
+  const runningNow = round.status === "IN_PROGRESS" || round.status === "RESULTS_PENDING";
+  const barTone = round.status === "SCHEDULED" ? "info" : round.status === "CANCELLED" ? "danger" : round.status === "RESULTS_PUBLISHED" ? "success" : round.session ? "info" : "warning";
+  const barTitle =
+    round.status === "SCHEDULED"
+      ? "Not started"
+      : round.status === "RESULTS_PUBLISHED"
+        ? "Results published"
+        : round.status === "CANCELLED"
+          ? "Cancelled"
+          : round.session
+            ? `Check-in is open: ${round.counts.present} of ${round.counts.total} here`
+            : round.hasResults
+              ? round.counts.pending
+                ? `${round.counts.pending} result${round.counts.pending === 1 ? "" : "s"} still to enter`
+                : round.counts.onHold
+                  ? `${round.counts.onHold} on hold: decide before publishing`
+                  : "All results entered"
+              : "Talk running";
+  const barBody =
+    round.status === "SCHEDULED"
+      ? (round.can.startBlockedBy ??
+        `${round.counts.total} student${round.counts.total === 1 ? " is" : "s are"} in the drive. Starting tells them${round.sequence === 1 ? " and closes joining for good" : ""}.`)
+      : round.status === "RESULTS_PUBLISHED"
+        ? `${round.hasResults ? `${round.counts.selected} of ${round.counts.total} selected.` : `${round.counts.present} of ${round.counts.total} attended.`}${round.isLast ? " This was the last round." : ""}`
+        : !runningNow
+          ? ""
+          : round.session
+            ? "Close check-in when everyone is in. Students who didn't check in then count as absent, unless the placement office marks them by hand."
+            : round.hasResults
+              ? `${round.counts.selected} selected so far. Students see nothing until you publish.${round.isLast ? " This is the last round: selected students are selected for the job." : ""}`
+              : `${round.counts.present} checked in. Finish the talk when it's over; everyone stays in the drive${round.tookAttendance ? " except those absent" : ""}.`;
   const running = round.status === "IN_PROGRESS" || round.status === "RESULTS_PENDING";
   const resultOf = (s: RoundStudent) => draft[s.participationId] ?? s.result;
   // Absent only once check-in is closed; while it's open, everyone may still arrive.
@@ -86,116 +117,83 @@ export default function RoundPage() {
 
   return (
     <>
-      <header className="page-head">
-        <PageTitle
-          trail={[
-            { label: "Drives", to: paths.list },
-            { label: round.drive.roleTitle, to: paths.item(id) },
-          ]}
-          here={round.title}
-        />
-        <p className="lead cy-drive-sub">
-          <span>
-            Round {round.sequence} · {ROUND_KINDS[round.type].label} · {round.mode === "ONLINE" ? "Online" : round.venue || "Venue to be announced"} · {when(round.startsAt)}
-          </span>
-          <span className={`stage ${tone}`}>{label}</span>
-        </p>
+      <header className="rq-head">
+        <div className="rq-head-text">
+          <p className="rq-crumb">
+            <Link to={paths.list}>Drives</Link>
+            <span aria-hidden="true">/</span>
+            <Link to={paths.item(id)}>{round.drive.roleTitle}</Link>
+          </p>
+          <h1 className="rq-title">{round.title}</h1>
+          <p className="rq-meta">
+            <span>Round {round.sequence}</span>
+            <span>{ROUND_KINDS[round.type].label}</span>
+            <span>{round.mode === "ONLINE" ? "Online" : round.venue || "Venue to be announced"}</span>
+            <span>{when(round.startsAt)}</span>
+            <span className={`stage ${tone}`}>{label}</span>
+          </p>
+        </div>
       </header>
 
       {act.error && <Alert>{act.error}</Alert>}
       {msg && <Saved>{msg}</Saved>}
 
-      {/* What to do next */}
-      {round.status === "SCHEDULED" && (
-        <div className="banner fam-azure cy-next">
-          <div className="banner-words">
-            <p className="banner-title">Not started</p>
-            <p className="banner-detail">
-              {round.can.startBlockedBy ??
-                `${round.counts.total} student${round.counts.total === 1 ? " is" : "s are"} in the drive. Starting tells them${round.sequence === 1 ? " and closes joining for good" : ""}.`}
-            </p>
-          </div>
-          {round.can.start && (
-            <div className="cy-next-actions">
-              <button type="button" className="banner-go" disabled={act.busy} onClick={() => doing("Round started. Students have been told.", () => roundsApi.start(round.id))}>
-                Start the round
-              </button>
-            </div>
-          )}
+      {/* What to do next: one quiet bar */}
+      <section className={`ui-status tone-${barTone}`} aria-label="Where this round is">
+        <span className="ui-status-dot" aria-hidden="true" />
+        <div className="ui-status-text">
+          <p className="ui-status-title banner-title">{barTitle}</p>
+          {barBody && <p className="ui-status-body">{barBody}</p>}
         </div>
-      )}
-      {running && (
-        <div className="banner fam-lime cy-next">
-          <div className="banner-words">
-            <p className="banner-title">
-              {round.session
-                ? `Check-in is open: ${round.counts.present} of ${round.counts.total} here`
-                : round.hasResults
-                ? round.counts.pending
-                  ? `${round.counts.pending} result${round.counts.pending === 1 ? "" : "s"} still to enter`
-                  : round.counts.onHold
-                    ? `${round.counts.onHold} on hold: decide before publishing`
-                    : "All results entered"
-                : "Talk running"}
-            </p>
-            <p className="banner-detail">
-              {round.session
-                ? "Close check-in when everyone is in. Students who didn't check in then count as absent, unless the placement office marks them by hand."
-                : round.hasResults
-                ? `${round.counts.selected} selected so far. Students see nothing until you publish. ${round.isLast ? "This is the last round: selected students are selected for the job." : ""}`
-                : `${round.counts.present} checked in. Finish the talk when it's over; everyone stays in the drive${round.tookAttendance ? " except those absent" : ""}.`}
-            </p>
+        {round.status === "SCHEDULED" && round.can.start && (
+          <div className="ui-status-actions">
+            <button type="button" className="primary" disabled={act.busy} onClick={() => doing("Round started. Students have been told.", () => roundsApi.start(round.id))}>
+              Start the round
+            </button>
           </div>
-          {round.can.publish && !round.session && (
-            <div className="cy-next-actions">
-              <button
-                type="button"
-                className="banner-go"
-                disabled={act.busy || changed.length > 0 || (round.hasResults && (round.counts.pending > 0 || round.counts.onHold > 0))}
-                title={changed.length ? "Save your changes first" : undefined}
-                onClick={() =>
-                  window.confirm(
-                    round.hasResults
-                      ? "Publish the results? Students not selected or absent leave the drive and everyone is told. This can't be undone."
-                      : "Finish the talk? Absent students leave the drive.",
-                  ) && doing(round.hasResults ? "Results published. Everyone has been told." : "Done.", () => roundsApi.publish(round.id))
-                }
-              >
-                {round.hasResults ? "Publish results" : "Finish the talk"}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-      {round.status === "RESULTS_PUBLISHED" && (
-        <div className="banner fam-lime">
-          <div className="banner-words">
-            <p className="banner-title">Results published</p>
-            <p className="banner-detail">
-              {round.hasResults ? `${round.counts.selected} of ${round.counts.total} selected.` : `${round.counts.present} of ${round.counts.total} attended.`}
-              {round.isLast ? " This was the last round." : ""}
-            </p>
+        )}
+        {running && round.can.publish && !round.session && (
+          <div className="ui-status-actions">
+            <button
+              type="button"
+              className="primary"
+              disabled={act.busy || changed.length > 0 || (round.hasResults && (round.counts.pending > 0 || round.counts.onHold > 0))}
+              title={changed.length ? "Save your changes first" : undefined}
+              onClick={() =>
+                window.confirm(
+                  round.hasResults
+                    ? "Publish the results? Students not selected or absent leave the drive and everyone is told. This can't be undone."
+                    : "Finish the talk? Absent students leave the drive.",
+                ) && doing(round.hasResults ? "Results published. Everyone has been told." : "Done.", () => roundsApi.publish(round.id))
+              }
+            >
+              {round.hasResults ? "Publish results" : "Finish the talk"}
+            </button>
           </div>
-        </div>
-      )}
+        )}
+      </section>
 
+      <div className="rq-main">
       {running && round.mode === "OFFLINE" && <CheckIn round={round} onChange={setRound} />}
       {panelRound && <PanelsSetup roundId={round.id} running={running} over={round.status === "RESULTS_PUBLISHED" || round.status === "CANCELLED"} />}
 
-      <section className="cy-section">
-        <div className="section-head">
-          <h2>Students</h2>
-          <span className="pill">{round.students.length}</span>
+      <section className="rq-card">
+        <div className="rq-card-head rp-card-head">
+          <div>
+            <h2>
+              Students <span className="ui-tab-count">{round.students.length}</span>
+            </h2>
+            {round.can.results && <p>Results stay hidden from students until you publish. A CSV from a test platform needs a roll number column and a result column.</p>}
+          </div>
           {round.can.results && (
-            <div className="cy-round-tools">
-              <label className="button quiet cy-file-button">
+            <div className="rp-tools cy-round-tools">
+              <label className="button rp-file cy-file-button">
                 Upload results CSV
                 <input type="file" accept=".csv,text/csv" onChange={importFile} hidden />
               </label>
               {Object.keys(recs).length > 0 && (
                 <button
                   type="button"
-                  className="quiet"
                   onClick={() =>
                     setDraft((d) => ({
                       ...d,
@@ -212,7 +210,6 @@ export default function RoundPage() {
               )}
               <button
                 type="button"
-                className="quiet"
                 onClick={() =>
                   setDraft((d) => ({
                     ...d,
@@ -228,16 +225,11 @@ export default function RoundPage() {
             </div>
           )}
         </div>
-        {round.can.results && (
-          <p className="faint small">
-            CSV from a test platform: the first row needs a roll number column and a result column (words like Selected / Rejected, Pass / Fail, Qualified / Not qualified).
-          </p>
-        )}
         {!round.students.length ? (
-          <p className="faint">No students in this round.</p>
+          <p className="rq-empty">No students in this round.</p>
         ) : (
           <div className="scroll">
-            <table className="cy-table">
+            <table className="cy-table dd-table">
               <thead>
                 <tr>
                   <th scope="col">Student</th>
@@ -252,9 +244,8 @@ export default function RoundPage() {
                 {round.students.map((s) => (
                   <tr key={s.participationId}>
                     <td>
-                      {s.name}
-                      <br />
-                      <span className="faint small">{s.rollNo}</span>
+                      <span className="dd-name">{s.name}</span>
+                      <span className="dd-roll">{s.rollNo}</span>
                     </td>
                     <td>
                       {s.branch} {s.batch}
@@ -300,6 +291,7 @@ export default function RoundPage() {
           </div>
         )}
       </section>
+      </div>
     </>
   );
 }
@@ -380,10 +372,11 @@ function CheckIn({ round, onChange }: { round: RoundView; onChange: (r: RoundVie
 
   if (round.session) {
     return (
-      <section className="cy-section">
-        <div className="section-head">
-          <h2>Check-in</h2>
-          <span className="stage working fam-azure">Open</span>
+      <section className="rq-card">
+        <div className="rq-card-head rp-card-head">
+          <h2>
+            Check-in <span className="stage working fam-azure">Open</span>
+          </h2>
         </div>
         <QrScreen
           sessionId={round.session.id}
@@ -399,19 +392,17 @@ function CheckIn({ round, onChange }: { round: RoundView; onChange: (r: RoundVie
   }
 
   return (
-    <section className="cy-section">
-      <div className="section-head">
+    <section className="rq-card">
+      <div className="rq-card-head">
         <h2>Check-in</h2>
+        <p>Open check-in and put this page on a screen at the venue. Students scan the QR code with their phone. The code changes every few seconds, so a photo shared on a group stops working.</p>
       </div>
-      <div className="panel stack cy-wide">
+      <div className="rp-body">
         {form.error && <Alert>{form.error}</Alert>}
-        <p className="small">
-          Open check-in and put this page on a screen at the venue. Students scan the QR code with their phone. The code changes every few seconds, so a photo of it shared on a group stops working.
-        </p>
         <label className="cy-check">
           <input type="checkbox" checked={useHere} onChange={(e) => setUseHere(e.target.checked)} /> Only allow check-in near where I am now (uses this device's location)
         </label>
-        {useHere && <Field label="How near (metres)" type="number" min="20" max="2000" value={radius} onChange={(e) => setRadius(e.target.value)} hint="150 m covers a building. Phone GPS indoors can be off by 30–50 m." />}
+        {useHere && <Field label="How near" size="sm" type="number" min="20" max="2000" value={radius} onChange={(e) => setRadius(e.target.value)} hint="Metres. 150 covers a building; phone GPS indoors can be off by 30–50 m." />}
         <div className="buttons">
           <button type="button" className="primary" disabled={form.busy} onClick={() => void open()}>
             {locating ? "Finding your location…" : round.tookAttendance ? "Open check-in again" : "Open check-in"}

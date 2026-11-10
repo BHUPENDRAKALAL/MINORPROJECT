@@ -83,7 +83,7 @@ export function createStudentsService({ db }: StudentsDeps) {
         db.studentDocument.findMany({
           where: { studentId: student.id, status: { not: "SUPERSEDED" } },
           orderBy: { createdAt: "asc" },
-          include: { file: { select: { id: true, originalName: true, mimeType: true, sizeBytes: true, scanStatus: true } } },
+          include: { file: { select: { id: true, originalName: true, mimeType: true, sizeBytes: true, scanStatus: true, scanNote: true } } },
         }),
         openTask(student.id),
         db.reviewTask.findFirst({

@@ -38,7 +38,7 @@ export function ParticipationChip({ status }: { status: ParticipationStatus }) {
 }
 
 const ROUND_STATUS: Record<NonNullable<Round["status"]>, [string, string]> = {
-  SCHEDULED: ["Upcoming", "waiting"],
+  SCHEDULED: ["Upcoming", "idle"],
   IN_PROGRESS: ["Happening now", "working fam-azure"],
   RESULTS_PENDING: ["Results awaited", "working fam-sun"],
   RESULTS_PUBLISHED: ["Results out", "done fam-lime"],

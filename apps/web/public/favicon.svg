@@ -1,1 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Cyrus"><defs><mask id="cyrus-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100"><rect width="100" height="100" fill="white"/><circle cx="60" cy="60" r="34" fill="black"/></mask></defs><rect width="100" height="100" rx="22" fill="#0c0d10"/><g transform="translate(16 16) scale(0.68)"><g mask="url(#cyrus-cut)"><circle cx="42" cy="42" r="33" fill="none" stroke="#f2f4f7" stroke-width="7"/></g><circle cx="60" cy="60" r="27" fill="#f2f4f7"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Cyrus">
+  <!-- Cyrus mark: a bright disc with a green crescent rim, three claw marks and a small lime moon. -->
+  <defs>
+    <clipPath id="cyrus-face">
+      <circle cx="34" cy="30" r="24" />
+    </clipPath>
+  </defs>
+  <!-- green crescent: a slightly bigger circle behind, showing at the lower left -->
+  <circle cx="31.2" cy="32.8" r="25.4" fill="#1f7a4a" />
+  <!-- the face -->
+  <circle cx="34" cy="30" r="24" fill="#f3f3ec" />
+  <!-- three claw marks, needle-thin at the top right, widest near the lower left -->
+  <g clip-path="url(#cyrus-face)" fill="#14160f">
+    <path d="M46 11 L17.0 34.33 L12 41 L19.24 36.87 Z" />
+    <path d="M53 16 L22.2 41.66 L17 49 L24.76 44.46 Z" />
+    <path d="M57.5 25 L29.7 48.35 L25 55 L32.0 50.85 Z" />
+  </g>
+  <!-- the small moon -->
+  <circle cx="21.5" cy="18.5" r="3.7" fill="#d4e43b" stroke="#14160f" stroke-width="1.2" />
+</svg>

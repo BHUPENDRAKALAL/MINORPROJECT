@@ -245,4 +245,32 @@ describe.skipIf(!hasTestDb)("student profile and verification (database)", () =>
     const s = await student(t, 9);
     await request(t.app).get("/api/v1/admin/team").set(as(s.token)).expect(403);
   });
+
+  it("a reviewer can open one task from the list; it's then locked to them", async () => {
+    const t = testApp();
+    await completeAndSubmit(t, 1);
+    await completeAndSubmit(t, 2);
+    const a = await member(t, "a@mbm.example", "STAFF", ["verify.first"]);
+    const b = await member(t, "b@mbm.example", "STAFF", ["verify.first"]);
+
+    const list = await request(t.app).get("/api/v1/work/queue").set(as(a)).expect(200);
+    expect(list.body.waiting).toHaveLength(2);
+    const second = list.body.waiting[1].id as string;
+
+    // Opening the second one in the list (not the "next" one) works, and asking again returns the same task.
+    const got = await request(t.app).post(`/api/v1/work/tasks/${second}/claim`).set(as(a)).expect(200);
+    expect(got.body.id).toBe(second);
+    await request(t.app).post(`/api/v1/work/tasks/${second}/claim`).set(as(a)).expect(200);
+
+    // Someone else can't take it while it's locked, and the holder can't open a second one at the same time.
+    const taken = await request(t.app).post(`/api/v1/work/tasks/${second}/claim`).set(as(b)).expect(409);
+    expect(taken.body.error.code).toBe("TASK_TAKEN");
+    const other = list.body.waiting[0].id as string;
+    const held = await request(t.app).post(`/api/v1/work/tasks/${other}/claim`).set(as(a)).expect(409);
+    expect(held.body.error.code).toBe("TASK_HELD");
+
+    // A student can't claim review work at all.
+    const s = await student(t, 9);
+    await request(t.app).post(`/api/v1/work/tasks/${other}/claim`).set(as(s.token)).expect(403);
+  });
 });

@@ -28,6 +28,7 @@ import { studentRoutes } from "../modules/students/routes.ts";
 import { createReviewService } from "../modules/review/service.ts";
 import { reviewRoutes } from "../modules/review/routes.ts";
 import { teamRoutes } from "../modules/team/routes.ts";
+import { overviewRoutes } from "../modules/overview/routes.ts";
 import { createDrivesService } from "../modules/drives/service.ts";
 import { driveRoutes } from "../modules/drives/routes.ts";
 import { createRoundsService } from "../modules/rounds/service.ts";
@@ -111,6 +112,7 @@ export function buildApp(deps: AppDeps): Express {
     const service = createAuthService({ db: deps.db, mailer: deps.mailer, env });
     mountRoutes(v1, registry, PREFIX, authRoutes({ service, cookieSecure: env.COOKIE_SECURE }), ctx);
     mountRoutes(v1, registry, PREFIX, teamRoutes(deps.db, service), ctx);
+    mountRoutes(v1, registry, PREFIX, overviewRoutes(deps.db), ctx);
     const interviews = createInterviewsService({ db: deps.db, mailer: deps.mailer, env, now: deps.now });
     const offers = deps.storage ? createOffersService({ db: deps.db, mailer: deps.mailer, storage: deps.storage, env, now: deps.now }) : null;
     mountRoutes(v1, registry, PREFIX, driveRoutes(createDrivesService({ db: deps.db, mailer: deps.mailer, env, myLine: interviews.myLine, myOffer: offers?.mine })), ctx);

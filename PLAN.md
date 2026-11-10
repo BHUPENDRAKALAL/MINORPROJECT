@@ -12,7 +12,7 @@
 | Students | Seya Mali (24UCSE4073), Bhupendra Kalal (24UCSE4008) |
 | Guide / Mentor | Dr. Abhishek Gaur / Dr. Simran Choudhary |
 | Base document | Original synopsis (`kalaaaal.pdf`). This plan extends it with the **Company HR–driven drive flow** |
-| Last updated | 2026-11-09 |
+| Last updated | 2026-11-10 |
 
 ---
 
@@ -174,7 +174,7 @@ Built 2026-11-08 (Phase B4).
 | File storage | Private storage + short-lived links (provider still open) | Resumes, marksheets, JDs, offer letters |
 | Deployment | Docker containers; Docker Compose for dev/demo; **k8s optional in Week 6 (P2)** | |
 
-**Security basics:** hashed passwords, rate limits, schema validation on every route, audit log, short-lived file links, virus scan on uploads, crawler blocked from private IPs, no student personal data to HR before opt-in.
+**Security basics:** hashed passwords, rate limits, schema validation on every route, audit log, short-lived file links, uploads rebuilt (cleaned) in a locked-down sanitizer container instead of an antivirus scan, crawler blocked from private IPs, no student personal data to HR before opt-in.
 
 ---
 
@@ -290,3 +290,5 @@ Repo: PlaceMint, a public placement-portal project on GitHub (Flask + Vue + SQLi
 | 2026-11-08 | Drives Phase B4 built: offer letters (PDF per selected student, visible only to the student, TPO and company HR via 2-minute links; replace or withdraw), student accept/decline with a deadline (expired after it), accepting places the student and writes the placement record, one-offer rule with the dream-offer exception, TPO closes the drive. Company HR and interviewers can open the resume of students who joined their drives. Demo: Billing Analyst drive with final results out. Phase B of drives is complete |
 | 2026-11-09 | Live drive simulation (9 people signed in at once: HR, TPO, 2 interviewers, 4 students) passes end to end; it found one bug (fixed). Added: structured interview key points (1–5 ratings per criterion for the round's kind, strengths, concerns), interviewers see every earlier round's results and panel notes for the student, and a Notifications page for every role with an unread badge in the side panel |
 | 2026-11-09 | Added PROBLEMS-AND-FIXES.md: every bug, setup problem and test failure so far with its cause and fix, plus what's still open. Kept up to date from now on |
+| 2026-11-10 | Uploads are now **cleaned, not scanned**: every PDF is rebuilt from its pages only and every image is re-encoded, in a throw-away process inside a locked-down sanitizer container (no secrets, read-only, not root, memory/CPU limits, restarts itself). Only the clean copy is kept; marksheets stay PDF. ClamAV dropped (needs ~1.5 GB RAM). Live updates stay on polling (no Socket.io needed). See PROBLEMS-AND-FIXES.md |
+| 2026-11-10 | **Frontend overhaul** to one quiet, GitLab-style design system (`apps/web/src/system.css`): creamy light theme, fields sized by content and settings-style form sections, one status bar per page with the rare actions under "⋯", cards and grey-headed tables, Sonner toasts, a full-height side panel and a proper account menu and page. New logo (white disc, green rim, three claw marks, lime dot). Sign-in pages: centred card on a hover-reactive dot shader, the page's character as the text cursor, placeholders and a password strength meter. Rebuilt: review queue (list + task view), student home, drives and drive page, student profile, office/HR drive page, round page, drive editor, panel screen, notifications, team pages. **Office Overview built** (new `GET /admin/overview`, counts only; TPO and staff, volunteers see their own review numbers) |

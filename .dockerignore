@@ -1,0 +1,9 @@
+# Keep the build context small: images copy only the few files they name.
+**/node_modules
+.git
+**/dist
+**/e2e-results
+**/e2e-report
+**/.review
+apps/desktop
+.env

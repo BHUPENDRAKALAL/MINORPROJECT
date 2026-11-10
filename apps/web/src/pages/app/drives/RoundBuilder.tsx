@@ -1,6 +1,6 @@
 import { useId } from "react";
 import { MAX_ROUNDS, nextRoundTitle, ROUND_KINDS, ROUND_TEMPLATES, ROUND_TYPES, type RoundType } from "@cyrus/shared";
-import { Field, SelectField } from "../../../components/form";
+import { Field, SelectField, TextField } from "../../../components/form";
 import type { Round } from "../../../lib/api";
 import { fromLocalInput, renumber, toLocalInput } from "./format";
 
@@ -111,26 +111,33 @@ function RoundCard({
           </button>
         </div>
       </div>
-      <div className="cy-grid">
-        <Field label="Round name" value={r.title} maxLength={80} onChange={(e) => onSet({ title: e.target.value })} error={err("title")} placeholder={ROUND_KINDS[r.type].label} />
-        <SelectField label="Where" value={r.mode} onChange={(e) => onSet({ mode: e.target.value as Round["mode"] })}>
+      <div className="form-row">
+        <Field label="Round name" size="md" value={r.title} maxLength={80} onChange={(e) => onSet({ title: e.target.value })} error={err("title")} placeholder={ROUND_KINDS[r.type].label} />
+        <SelectField label="Where" size="sm" value={r.mode} onChange={(e) => onSet({ mode: e.target.value as Round["mode"] })}>
           <option value="OFFLINE">On campus</option>
           <option value="ONLINE">Online</option>
         </SelectField>
+      </div>
+      <div className="form-row">
         <Field
           label="Starts"
+          size="md"
+          optional
           type="datetime-local"
           value={toLocalInput(r.startsAt)}
           onChange={(e) => onSet({ startsAt: fromLocalInput(e.target.value) })}
           error={err("startsAt")}
-          hint="Leave empty if not fixed yet."
+          hint="Leave empty until it is fixed."
         />
         {r.mode === "OFFLINE" ? (
-          <Field label="Venue" value={r.venue ?? ""} maxLength={200} onChange={(e) => onSet({ venue: e.target.value || null })} error={err("venue")} placeholder="e.g. CSE block, Lab 2" />
+          <Field label="Venue" size="md" optional value={r.venue ?? ""} maxLength={200} onChange={(e) => onSet({ venue: e.target.value || null })} error={err("venue")} placeholder="e.g. CSE block, Lab 2" />
         ) : (
           <Field
             label="Test or meeting link"
+            size="lg"
+            optional
             type="url"
+            placeholder="https://"
             value={r.onlineLink ?? ""}
             onChange={(e) => onSet({ onlineLink: e.target.value || null })}
             error={err("onlineLink")}
@@ -138,10 +145,16 @@ function RoundCard({
           />
         )}
       </div>
-      <div className="field">
-        <label htmlFor={notesId}>Instructions for students (optional)</label>
-        <textarea id={notesId} rows={2} maxLength={2000} value={r.instructions ?? ""} onChange={(e) => onSet({ instructions: e.target.value || null })} />
-      </div>
+      <TextField
+        id={notesId}
+        label="Instructions for students"
+        optional
+        rows={2}
+        maxLength={2000}
+        placeholder="e.g. Bring your college ID and a pen."
+        value={r.instructions ?? ""}
+        onChange={(e) => onSet({ instructions: e.target.value || null })}
+      />
     </li>
   );
 }

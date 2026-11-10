@@ -187,14 +187,14 @@ export function createDrivesService({ db, mailer, env, myLine, myOffer }: Drives
         ...(companies ? { companyId: { in: companies } } : { NOT: { status: "DRAFT", createdById: { not: auth.userId } } }),
       },
       orderBy: [{ updatedAt: "desc" }],
-      include: { company: { select: { id: true, name: true } }, _count: { select: { rounds: true } } },
+      include: {
+        company: { select: { id: true, name: true } },
+        rounds: { orderBy: { sequence: "asc" }, select: { title: true, status: true, startsAt: true } },
+      },
     });
-    const joined = await db.participation.groupBy({
-      by: ["driveId", "status"],
-      where: { driveId: { in: drives.map((d) => d.id) }, status: { in: ["INVITED", "OPTED_IN"] } },
-      _count: true,
-    });
-    const n = (driveId: string, s: string) => joined.find((j) => j.driveId === driveId && j.status === s)?._count ?? 0;
+    const byStatus = await db.participation.groupBy({ by: ["driveId", "status"], where: { driveId: { in: drives.map((d) => d.id) } }, _count: true });
+    const n = (driveId: string, ...s: string[]) => byStatus.filter((j) => j.driveId === driveId && s.includes(j.status)).reduce((a, j) => a + j._count, 0);
+    const AFTER_SELECTION = ["SELECTED", "OFFERED", "PLACED", "OFFER_DECLINED"];
     const myCompanies = companies ? await db.company.findMany({ where: { id: { in: companies } }, select: { id: true, name: true } }) : null;
     return {
       companies: myCompanies,
@@ -207,9 +207,17 @@ export function createDrivesService({ db, mailer, env, myLine, myOffer }: Drives
         stipendMonthly: d.stipendMonthly,
         status: d.status,
         optInDeadline: d.optInDeadline,
-        rounds: d._count.rounds,
-        invited: n(d.id, "INVITED") + n(d.id, "OPTED_IN"),
-        joined: n(d.id, "OPTED_IN"),
+        rounds: d.rounds.length,
+        roundsDone: d.rounds.filter((r) => r.status === "RESULTS_PUBLISHED" || r.status === "CANCELLED").length,
+        currentRound: d.rounds.find((r) => r.status === "IN_PROGRESS" || r.status === "RESULTS_PENDING")?.title ?? null,
+        nextRound: (({ title, startsAt }) => ({ title, startsAt }))(d.rounds.find((r) => r.status === "SCHEDULED") ?? { title: null, startsAt: null }),
+        // Everyone ever invited (not taken back); invited but not answered; joined and still in; selected; placed
+        invited: byStatus.filter((j) => j.driveId === d.id && j.status !== "REMOVED").reduce((a, j) => a + j._count, 0),
+        awaiting: n(d.id, "INVITED"),
+        joined: n(d.id, "OPTED_IN", ...AFTER_SELECTION),
+        active: n(d.id, "OPTED_IN"),
+        selected: n(d.id, ...AFTER_SELECTION),
+        placed: n(d.id, "PLACED"),
         updatedAt: d.updatedAt,
       })),
     };

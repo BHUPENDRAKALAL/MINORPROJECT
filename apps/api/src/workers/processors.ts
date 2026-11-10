@@ -5,6 +5,7 @@ import type { Env } from "../config/env.ts";
 import { createTransport, type Transporter } from "nodemailer";
 import type { EmailMessage } from "../lib/mail.ts";
 import type { Storage } from "../lib/storage.ts";
+import type { Sanitizer } from "../lib/sanitizer.ts";
 import { scanFile } from "./file-scan.ts";
 
 export type MailEnv = Pick<Env, "MAIL_MODE" | "MAIL_FROM" | "SMTP_HOST" | "SMTP_PORT" | "SMTP_SECURE" | "SMTP_USER" | "SMTP_PASS">;
@@ -13,6 +14,7 @@ export interface ProcessorContext {
   db: Db;
   env: MailEnv;
   storage: Storage;
+  sanitize: Sanitizer;
 }
 
 let transport: Transporter | undefined;
@@ -69,7 +71,7 @@ export const PROCESSORS: Record<QueueKey, Record<string, Processor>> = {
   notify: { "system.ping": ping, "email.send": sendEmail },
   webhooks: { "system.ping": ping },
   imports: { "system.ping": ping },
-  documents: { "system.ping": ping, "file.scan": (job, ctx) => scanFile(ctx.db, ctx.storage, String(job.data.data["fileId"])) },
+  documents: { "system.ping": ping, "file.scan": (job, ctx) => scanFile(ctx.db, ctx.storage, ctx.sanitize, String(job.data.data["fileId"])) },
   companyChecks: { "system.ping": ping },
   reports: { "system.ping": ping },
 };
