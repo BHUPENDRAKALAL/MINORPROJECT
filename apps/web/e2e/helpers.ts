@@ -59,7 +59,8 @@ export async function signIn(page: Page, email: string, password = DEMO_PASSWORD
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).not.toHaveURL(/sign-in/);
+  // Sign-in hashes the password and the dev proxy can lag late in a full run: allow more than the default 10 s.
+  await expect(page).not.toHaveURL(/sign-in/, { timeout: 30_000 });
 }
 
 export async function signOut(page: Page) {
