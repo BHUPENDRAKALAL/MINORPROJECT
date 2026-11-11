@@ -353,6 +353,8 @@ export interface StudentProfileView {
     verifiedAt: string | null;
     email: string;
     phone: string | null;
+    /** Leave my name out of placement announcements (I'm still counted). */
+    hideInAnnouncements: boolean;
   };
   draft: AcademicRecord | null;
   verified: AcademicRecord | null;
@@ -367,7 +369,7 @@ export interface StudentProfileView {
 
 export const studentApi = {
   get: () => api<StudentProfileView>("/students/me"),
-  update: (body: Partial<{ name: string; phone: string | null; gender: string | null; degree: string | null; skills: string[]; resumeFileId: string | null }>) =>
+  update: (body: Partial<{ name: string; phone: string | null; gender: string | null; degree: string | null; skills: string[]; resumeFileId: string | null; hideInAnnouncements: boolean }>) =>
     api<StudentProfileView>("/students/me", { method: "PATCH", body }),
   saveAcademics: (body: AcademicInput) => api<StudentProfileView>("/students/me/academics", { method: "PUT", body }),
   addDocument: (body: { fileId: string; type: StudentDocument["type"]; semester?: number | null }) =>
@@ -453,6 +455,123 @@ export interface OfficeOverview {
 
 export const overviewApi = {
   get: () => api<OfficeOverview>("/admin/overview"),
+};
+
+/** GET /admin/students: one row in the placement office's student list. */
+export interface OfficeStudentRow {
+  id: string;
+  name: string;
+  rollNo: string;
+  branch: string;
+  batch: number;
+  status: StudentStatus;
+  placementStatus: "PLACED" | "NOT_PLACED";
+  cgpa: number | null;
+  activeBacklogs: number | null;
+  tenthPercent: number | null;
+  twelfthPercent: number | null;
+  diplomaPercent: number | null;
+  createdAt: string;
+  email: string;
+  drives: { invited: number; joined: number; selected: number };
+}
+
+export interface OfficeStudentList {
+  total: number;
+  page: number;
+  pageSize: number;
+  counts: { all: number; PROFILE_INCOMPLETE: number; PENDING_VERIFICATION: number; VERIFIED: number; REJECTED: number; placed: number };
+  branches: string[];
+  batches: number[];
+  students: OfficeStudentRow[];
+}
+
+/** GET /admin/students/:id: one student's whole record for the placement office. */
+export interface OfficeStudentDetail {
+  profile: Omit<OfficeStudentRow, "drives"> & {
+    totalBacklogs: number | null;
+    skills: string[];
+    resumeFileId: string | null;
+    verifiedAt: string | null;
+    noShowCount: number;
+    phone: string | null;
+    joinedAt: string;
+  };
+  pendingUpdate: { cgpa: number | null; semester: number | null; createdAt: string } | null;
+  documents: { id: string; type: StudentDocument["type"]; semester: number | null; status: string; file: { id: string; originalName: string; scanStatus: string; sizeBytes: number } }[];
+  drives: {
+    id: string;
+    driveId: string;
+    roleTitle: string;
+    company: string;
+    driveStatus: DriveStatus;
+    jobType: JobType;
+    ctcLpa: number | null;
+    stipendMonthly: number | null;
+    status: ParticipationStatus;
+    invitedAt: string;
+    respondedAt: string | null;
+    offer: { status: string; ctcLpa: number | null; respondBy: string } | null;
+  }[];
+}
+
+export const officeStudentsApi = {
+  list: (query: string) => api<OfficeStudentList>(`/admin/students${query ? `?${query}` : ""}`),
+  get: (id: string) => api<OfficeStudentDetail>(`/admin/students/${id}`),
+};
+
+/** A clash between this drive and another live drive (GET /drives/:id/clashes, TPO only). */
+export interface DriveClash {
+  severity: "high" | "medium";
+  kind: "venue" | "students" | "busy_day" | "deadline";
+  round: { id: string | null; title: string; start: string | null; end: string | null; venue: string | null } | null;
+  other: { driveId: string; company: string; roleTitle: string; roundTitle: string | null; start: string | null; end: string | null; venue: string | null } | null;
+  shared?: number;
+  count?: number;
+  day: string;
+}
+
+/** A busy-time hint for HR picking a round time (no other company's details). */
+export interface SlotNote {
+  severity: "high" | "medium";
+  kind: DriveClash["kind"];
+  roundTitle: string | null;
+  message: string;
+}
+
+export interface CalendarEvent {
+  id: string;
+  kind: "round";
+  title: string;
+  roundType: RoundType;
+  mode: "OFFLINE" | "ONLINE";
+  start: string;
+  end: string;
+  day: string;
+  venue: string | null;
+  roundStatus: NonNullable<Round["status"]>;
+  driveId: string;
+  roleTitle: string;
+  company: string;
+  driveStatus: DriveStatus;
+  joined: number;
+  clash: "venue" | null;
+}
+
+export interface CalendarDeadline {
+  driveId: string;
+  roleTitle: string;
+  company: string;
+  driveStatus: DriveStatus;
+  at: string;
+  day: string;
+}
+
+export const scheduleApi = {
+  clashes: (driveId: string) => api<{ clashes: DriveClash[]; checkedAt: string }>(`/drives/${driveId}/clashes`),
+  slotCheck: (driveId: string, body: { title?: string; mode: "OFFLINE" | "ONLINE"; startsAt: string; endsAt?: string | null; venue?: string | null }) =>
+    api<{ notes: SlotNote[] }>(`/drives/${driveId}/slot-check`, { method: "POST", body }),
+  calendar: (from: string, to: string) => api<{ events: CalendarEvent[]; deadlines: CalendarDeadline[] }>(`/admin/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
 };
 
 export const workApi = {
@@ -549,7 +668,11 @@ export interface OfficeDrive extends DriveBasics {
   rounds: Round[];
   missing: string[];
   counts: { invited: number; joined: number; skipped: number; total: number };
-  can: { edit: boolean; editLimited: boolean; editRounds: boolean; submit: boolean; withdraw: boolean; decide: boolean; invite: boolean; cancel: boolean; delete: boolean };
+  can: { edit: boolean; editLimited: boolean; editRounds: boolean; submit: boolean; withdraw: boolean; decide: boolean; invite: boolean; cancel: boolean; delete: boolean; announce: boolean; unannounce: boolean };
+  /** When the TPO announced who was selected (null: not announced). */
+  announcedAt: string | null;
+  /** Students selected in the final round (selected, offered or placed). */
+  selectedCount: number;
 }
 
 export interface DriveListItem {
@@ -638,7 +761,32 @@ export type StudentDriveView =
       rounds: Round[];
       me: MyState & { invitedAt: string; respondedAt: string | null };
       offer: OfferView | null;
+      /** Who was selected: the count once final results are out, names once the TPO announces (null for students who didn't take part). */
+      selected: SelectedList | null;
     });
+
+export interface SelectedList {
+  count: number;
+  announcedAt: string | null;
+  names: { name: string; branch: string }[];
+  /** Selected students who chose not to be named. */
+  hidden: number;
+}
+
+/** One announced drive, for the home page's placement news. */
+export interface PlacementNews {
+  id: string;
+  company: string;
+  roleTitle: string;
+  jobType: JobType;
+  ctcLpa: number | null;
+  stipendMonthly: number | null;
+  status: DriveStatus;
+  announcedAt: string;
+  count: number;
+  names: { name: string; branch: string }[];
+  hidden: number;
+}
 
 export const drivesApi = {
   list: () => api<{ companies: { id: string; name: string }[] | null; drives: DriveListItem[] }>("/drives"),
@@ -653,6 +801,9 @@ export const drivesApi = {
   approve: (id: string) => api<OfficeDrive>(`/admin/drives/${id}/approve`, { method: "POST" }),
   reject: (id: string, reason: string) => api<OfficeDrive>(`/admin/drives/${id}/reject`, { method: "POST", body: { reason } }),
   cancel: (id: string, reason: string) => api<OfficeDrive>(`/admin/drives/${id}/cancel`, { method: "POST", body: { reason } }),
+  announce: (id: string) => api<OfficeDrive>(`/admin/drives/${id}/announce`, { method: "POST" }),
+  unannounce: (id: string, reason: string) => api<OfficeDrive>(`/admin/drives/${id}/unannounce`, { method: "POST", body: { reason } }),
+  announcements: () => api<{ announcements: PlacementNews[] }>("/announcements"),
   preview: (id: string, eligibility?: Eligibility) =>
     api<{ count: number; students: EligibleStudent[] }>(`/drives/${id}/eligibility/preview`, { method: "POST", body: eligibility ? { eligibility } : {} }),
   invite: (id: string, body: { all?: boolean; studentIds?: string[] }) => api<{ invited: number; alreadyIn: number }>(`/drives/${id}/invitations`, { method: "POST", body }),

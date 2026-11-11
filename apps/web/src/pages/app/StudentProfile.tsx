@@ -286,13 +286,13 @@ export default function StudentProfile() {
   const action = useApiForm();
   const details = useApiForm();
   const [detailsSaved, setDetailsSaved] = useState(false);
-  const [d, setD] = useState({ name: "", phone: "", skills: "" });
+  const [d, setD] = useState({ name: "", phone: "", skills: "", hide: false });
 
   // Requests can finish out of order (e.g. "Save marks" then a quick "Send"). Only the newest one updates the page.
   const latest = useRef(0);
   const applyNow = useCallback((v: StudentProfileView) => {
     setView(v);
-    setD({ name: v.profile.name, phone: v.profile.phone ?? "", skills: v.profile.skills.join(", ") });
+    setD({ name: v.profile.name, phone: v.profile.phone ?? "", skills: v.profile.skills.join(", "), hide: v.profile.hideInAnnouncements });
   }, []);
   const track = useCallback(
     async (p: Promise<StudentProfileView>) => {
@@ -422,6 +422,7 @@ export default function StudentProfile() {
                   name: d.name,
                   phone: d.phone.trim() || null,
                   skills: d.skills.split(",").map((x) => x.trim()).filter(Boolean),
+                  hideInAnnouncements: d.hide,
                 }),
               );
               setDetailsSaved(true);
@@ -434,6 +435,13 @@ export default function StudentProfile() {
             <Field label="Phone" size="md" optional type="tel" placeholder="10-digit mobile" value={d.phone} onChange={(e) => setD({ ...d, phone: e.target.value })} error={details.fieldErrors.phone} hint="Shared with a company only after you opt in to its drive." />
           </div>
           <Field label="Skills" size="lg" optional placeholder="React, SQL, Python" value={d.skills} onChange={(e) => setD({ ...d, skills: e.target.value })} hint="Separate with commas. Companies see these." />
+          <label className="sp-check">
+            <input type="checkbox" checked={d.hide} onChange={(e) => setD({ ...d, hide: e.target.checked })} />
+            <span>
+              Don't show my name in placement announcements
+              <small>When the placement office announces who was selected, you're counted but not named.</small>
+            </span>
+          </label>
           <div className="buttons">
             <button className="primary" type="submit" disabled={details.busy}>
               {details.busy ? "Saving…" : "Save details"}

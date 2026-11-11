@@ -27,6 +27,7 @@ export interface ProfilePatch {
   links?: { label: string; url: string }[];
   resumeFileId?: string | null;
   photoFileId?: string | null;
+  hideInAnnouncements?: boolean;
 }
 
 /** States in which the student may change marks and documents. */
@@ -132,6 +133,7 @@ export function createStudentsService({ db }: StudentsDeps) {
             ...(patch.links !== undefined ? { links: patch.links } : {}),
             ...(patch.resumeFileId !== undefined ? { resumeFileId: patch.resumeFileId } : {}),
             ...(patch.photoFileId !== undefined ? { photoFileId: patch.photoFileId } : {}),
+            ...(patch.hideInAnnouncements !== undefined ? { hideInAnnouncements: patch.hideInAnnouncements } : {}),
           },
         });
         if (patch.phone !== undefined) await tx.user.update({ where: { id: userId }, data: { phone: patch.phone } });

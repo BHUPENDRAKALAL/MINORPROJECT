@@ -16,6 +16,7 @@ import { audit } from "../../lib/audit.ts";
 import { emit } from "../../lib/outbox.ts";
 import { notifyInApp, sendAfterCommit } from "../../lib/notify.ts";
 import type { Prisma } from "../../generated/prisma/client.ts";
+import { createClashes, dayOf, type Slot } from "./clashes.ts";
 
 type Tx = Prisma.TransactionClient;
 
@@ -60,6 +61,10 @@ const LOCKED_AFTER_APPROVAL = ["roleTitle", "jobType", "ctcLpa", "stipendMonthly
 
 /** Statuses that count as "in the drive" for a student (can see everything about it). */
 const IN_DRIVE = ["INVITED", "OPTED_IN", "OPTED_OUT", "EXPIRED", "ELIMINATED", "NO_SHOW", "SELECTED", "OFFERED", "PLACED", "OFFER_DECLINED"] as const;
+/** Students who came out of the last round selected (whatever happened to their offer since). */
+const SELECTED_STATES = ["SELECTED", "OFFERED", "PLACED"] as const;
+/** A drive whose final results are out can be announced. */
+const ANNOUNCEABLE = ["RESULTS_DECLARED", "CLOSED"] as const;
 
 const roundSelect = {
   id: true,
@@ -125,6 +130,77 @@ export function createDrivesService({ db, mailer, env, myLine, myOffer }: Drives
     return { AND: and };
   }
 
+  // ───────────── clashes and the campus calendar ─────────────
+
+  const clashChecker = createClashes(db, eligibleWhere);
+
+  /** Every clash this drive has with other live drives (TPO view, with names). */
+  async function clashes(auth: AuthContext, id: string) {
+    await ownDrive(auth, id);
+    return { clashes: await clashChecker.check(id), checkedAt: new Date().toISOString() };
+  }
+
+  /** HR (or the TPO) picking a time for a round: is campus busy then? Worded without other companies' details. */
+  async function slotCheck(auth: AuthContext, id: string, slot: Slot) {
+    await ownDrive(auth, id);
+    const found = (await clashChecker.check(id, [slot])).filter((c) => c.kind !== "deadline");
+    return { notes: clashChecker.forHr(found) };
+  }
+
+  /** Rounds and joining deadlines between two dates, for the placement office's campus calendar. */
+  async function calendar(from: Date, to: Date) {
+    const SHOWN = ["PENDING_APPROVAL", "PUBLISHED", "ONGOING", "RESULTS_DECLARED", "CLOSED"] as const;
+    const [rounds, deadlines] = await Promise.all([
+      db.round.findMany({
+        where: { startsAt: { gte: from, lt: to }, status: { not: "CANCELLED" }, drive: { status: { in: [...SHOWN] } } },
+        orderBy: { startsAt: "asc" },
+        select: {
+          id: true,
+          title: true,
+          type: true,
+          mode: true,
+          startsAt: true,
+          endsAt: true,
+          venue: true,
+          status: true,
+          drive: { select: { id: true, roleTitle: true, status: true, company: { select: { name: true } }, _count: { select: { participations: { where: { status: { in: ["OPTED_IN", "SELECTED", "OFFERED"] } } } } } } },
+        },
+      }),
+      db.drive.findMany({
+        where: { optInDeadline: { gte: from, lt: to }, status: { in: ["PENDING_APPROVAL", "PUBLISHED", "ONGOING"] } },
+        select: { id: true, roleTitle: true, status: true, optInDeadline: true, company: { select: { name: true } } },
+      }),
+    ]);
+    const twoHours = 2 * 60 * 60 * 1000;
+    const events = rounds.map((r) => ({
+      id: r.id,
+      kind: "round" as const,
+      title: r.title,
+      roundType: r.type,
+      mode: r.mode,
+      start: r.startsAt!.toISOString(),
+      end: (r.endsAt && r.endsAt > r.startsAt! ? r.endsAt : new Date(r.startsAt!.getTime() + twoHours)).toISOString(),
+      day: dayOf(r.startsAt!),
+      venue: r.venue,
+      roundStatus: r.status,
+      driveId: r.drive.id,
+      roleTitle: r.drive.roleTitle,
+      company: r.drive.company.name,
+      driveStatus: r.drive.status,
+      joined: r.drive._count.participations,
+      clash: null as null | "venue",
+    }));
+    // Same venue at overlapping times on the calendar: flag both.
+    const norm = (v: string | null) => (v ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+    for (const a of events)
+      for (const b of events)
+        if (a !== b && a.driveId !== b.driveId && a.mode === "OFFLINE" && b.mode === "OFFLINE" && norm(a.venue) && norm(a.venue) === norm(b.venue) && a.start < b.end && b.start < a.end) a.clash = "venue";
+    return {
+      events,
+      deadlines: deadlines.map((d) => ({ driveId: d.id, roleTitle: d.roleTitle, company: d.company.name, driveStatus: d.status, at: d.optInDeadline!.toISOString(), day: dayOf(d.optInDeadline!) })),
+    };
+  }
+
   // ───────────── shapes sent to the web app ─────────────
 
   async function officeView(auth: AuthContext, id: string) {
@@ -172,7 +248,11 @@ export function createDrivesService({ db, mailer, env, myLine, myOffer }: Drives
         invite: is(OPEN_DRIVE_STATUSES, status),
         cancel: tpo && !["CLOSED", "CANCELLED"].includes(status),
         delete: is(EDITABLE_DRIVE_STATUSES, status),
+        announce: tpo && is(ANNOUNCEABLE, status) && !drive.announcedAt,
+        unannounce: tpo && !!drive.announcedAt,
       },
+      announcedAt: drive.announcedAt,
+      selectedCount: SELECTED_STATES.reduce((a, st) => a + (count[st] ?? 0), 0),
     };
   }
 
@@ -387,6 +467,28 @@ export function createDrivesService({ db, mailer, env, myLine, myOffer }: Drives
       return tellParticipants(tx, id, drive.company.name, drive.roleTitle, "Round schedule changed", "The rounds or their dates, venue or link changed. Open the drive to see the new schedule.");
     });
     await sendAfterCommit(mailer, emails);
+    // A live drive's new schedule may now clash with another drive: the TPO hears about it (unless they made the change).
+    if (is(OPEN_DRIVE_STATUSES, status) && scheduleChanged && !tpo) {
+      const hard = (await clashChecker.check(id)).filter((c) => c.severity === "high");
+      if (hard.length) {
+        const notes = await db.$transaction(async (tx) => {
+          const out = [];
+          for (const userId of await tpoIds(tx)) {
+            out.push(
+              await notifyInApp(tx, {
+                userId,
+                channel: "DRIVES",
+                title: `Schedule clash: ${drive.company.name} · ${drive.roleTitle}`,
+                body: `HR changed the rounds and ${hard.length} clash${hard.length === 1 ? "" : "es"} came up (same venue or the same students at the same time). Open the drive to check.`,
+                link: link(`/office/drives/${id}`),
+              }),
+            );
+          }
+          return out;
+        });
+        await sendAfterCommit(mailer, notes);
+      }
+    }
     return officeView(auth, id);
   }
 
@@ -438,6 +540,86 @@ export function createDrivesService({ db, mailer, env, myLine, myOffer }: Drives
       await audit(tx, { actorId: auth.userId, action: "drive.withdrawn", entityType: "Drive", entityId: id });
     });
     return officeView(auth, id);
+  }
+
+  // ───────────── placement announcements ─────────────
+
+  /** The TPO announces a finished drive's selected students: they become visible to the drive's students and on everyone's home page. */
+  async function announce(auth: AuthContext, id: string) {
+    const drive = await ownDrive(auth, id);
+    if (!is(ANNOUNCEABLE, drive.status)) throw new ApiError(409, "BAD_STATE", "A drive can be announced once its final results are out.");
+    if (drive.announcedAt) throw new ApiError(409, "ALREADY_ANNOUNCED", "This drive is already announced.");
+    const selected = await db.participation.count({ where: { driveId: id, status: { in: [...SELECTED_STATES] } } });
+    if (!selected) throw new ApiError(409, "NOBODY_SELECTED", "Nobody was selected in this drive, so there is nothing to announce.");
+    const emails = await db.$transaction(async (tx) => {
+      await tx.drive.update({ where: { id }, data: { announcedAt: new Date() } });
+      await audit(tx, { actorId: auth.userId, action: "drive.announced", entityType: "Drive", entityId: id });
+      const people = await tx.participation.findMany({
+        where: { driveId: id, status: { notIn: ["INVITED", "OPTED_OUT", "EXPIRED", "REMOVED"] } },
+        select: { student: { select: { userId: true } } },
+      });
+      const out = [];
+      for (const p of people) {
+        out.push(
+          await notifyInApp(tx, {
+            userId: p.student.userId,
+            channel: "DRIVES",
+            title: `${drive.company.name} · ${drive.roleTitle}: placements announced`,
+            body: `The placement office announced who was selected (${selected}). Open the drive to see the list.`,
+            link: link(`/student/drives/${id}`),
+          }),
+        );
+      }
+      return out;
+    });
+    await sendAfterCommit(mailer, emails);
+    return officeView(auth, id);
+  }
+
+  /** Takes an announcement down (to correct a mistake). Students see the count again, not the names. */
+  async function unannounce(auth: AuthContext, id: string, reason: string) {
+    const drive = await ownDrive(auth, id);
+    if (!drive.announcedAt) throw new ApiError(409, "NOT_ANNOUNCED", "This drive isn't announced.");
+    await db.$transaction(async (tx) => {
+      await tx.drive.update({ where: { id }, data: { announcedAt: null } });
+      await audit(tx, { actorId: auth.userId, action: "drive.unannounced", entityType: "Drive", entityId: id, reason });
+    });
+    return officeView(auth, id);
+  }
+
+  /** Who was selected, as students see it: the count once results are out, names only once announced (minus those who opted out). */
+  async function selectedFor(drive: { id: string; status: string; announcedAt: Date | null }) {
+    if (!is(ANNOUNCEABLE, drive.status)) return null;
+    const rows = await db.participation.findMany({
+      where: { driveId: drive.id, status: { in: [...SELECTED_STATES] } },
+      orderBy: { student: { name: "asc" } },
+      select: { student: { select: { name: true, branch: true, hideInAnnouncements: true } } },
+    });
+    const shown = drive.announcedAt ? rows.filter((r) => !r.student.hideInAnnouncements) : [];
+    return {
+      count: rows.length,
+      announcedAt: drive.announcedAt,
+      names: shown.map((r) => ({ name: r.student.name, branch: r.student.branch })),
+      hidden: drive.announcedAt ? rows.length - shown.length : 0,
+    };
+  }
+
+  /** Placement news for the home page: recently announced drives, with the names that may be shown. */
+  async function announcements(limit = 6) {
+    const drives = await db.drive.findMany({
+      where: { announcedAt: { not: null }, status: { in: [...ANNOUNCEABLE] } },
+      orderBy: { announcedAt: "desc" },
+      take: limit,
+      select: { id: true, roleTitle: true, jobType: true, ctcLpa: true, stipendMonthly: true, status: true, announcedAt: true, company: { select: { name: true } } },
+    });
+    return {
+      announcements: await Promise.all(
+        drives.map(async ({ company, ...d }) => {
+          const sel = (await selectedFor(d))!;
+          return { ...d, company: company.name, count: sel.count, names: sel.names, hidden: sel.hidden };
+        }),
+      ),
+    };
   }
 
   async function decide(auth: AuthContext, id: string, approve: boolean, reason?: string) {
@@ -724,6 +906,8 @@ export function createDrivesService({ db, mailer, env, myLine, myOffer }: Drives
       })),
       me: { ...state, invitedAt: p!.invitedAt, respondedAt: p!.respondedAt },
       offer: joined && myOffer ? await myOffer(p!.id) : null,
+      // Only students who took part see who else was selected.
+      selected: joined ? await selectedFor(drive) : null,
     };
   }
 
@@ -758,6 +942,9 @@ export function createDrivesService({ db, mailer, env, myLine, myOffer }: Drives
     withdraw,
     decide,
     cancel,
+    announce,
+    unannounce,
+    announcements,
     preview,
     invite,
     participants,
@@ -768,6 +955,9 @@ export function createDrivesService({ db, mailer, env, myLine, myOffer }: Drives
     myDrive,
     respond,
     missingForSubmit,
+    clashes,
+    slotCheck,
+    calendar,
   };
 }
 

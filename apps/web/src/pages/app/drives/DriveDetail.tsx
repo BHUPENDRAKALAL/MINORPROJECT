@@ -2,9 +2,9 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useAuth } from "../../../app/useAuth";
 import { useApiForm } from "../../../components/useApiForm";
-import { Aside, Stat } from "../../../components/kit";
+import { Aside, Badge, Stat } from "../../../components/kit";
 import { Alert, Saved } from "../../../components/ui";
-import { drivesApi, type EligibleStudent, type OfficeDrive, type Participant } from "../../../lib/api";
+import { drivesApi, scheduleApi, type DriveClash, type EligibleStudent, type OfficeDrive, type Participant } from "../../../lib/api";
 import { useTitle } from "../../../lib/useTitle";
 import { FeedbackReview } from "./Interviews";
 import { OffersTab } from "./Offers";
@@ -29,6 +29,19 @@ export default function DriveDetail() {
   const runLoad = load.run;
   const reload = useCallback(() => void runLoad(async () => setDrive(await drivesApi.get(id))), [id, runLoad]);
   useEffect(reload, [reload]);
+
+  // The TPO sees clashes with other live drives (same venue or the same students at the same time).
+  const [clashes, setClashes] = useState<DriveClash[] | null>(null);
+  const watchClashes = role === "TPO" && !!drive && ["PENDING_APPROVAL", "PUBLISHED", "ONGOING"].includes(drive.status);
+  const driveVersion = drive ? `${drive.status}|${drive.rounds.map((r) => `${r.startsAt}|${r.venue}|${r.mode}`).join(",")}|${drive.optInDeadline}` : "";
+  useEffect(() => {
+    if (!watchClashes) return setClashes(null);
+    let gone = false;
+    scheduleApi.clashes(id).then((r) => !gone && setClashes(r.clashes), () => !gone && setClashes(null));
+    return () => {
+      gone = true;
+    };
+  }, [id, watchClashes, driveVersion]);
 
   if (!drive) return load.error ? <Alert>{load.error}</Alert> : null;
 
@@ -62,7 +75,7 @@ export default function DriveDetail() {
 
       {act.error && <Alert>{act.error}</Alert>}
       {done && <Saved>{done}</Saved>}
-      <NextStep drive={drive} doing={doing} onDelete={() => void act.run(async () => (await drivesApi.remove(drive.id), navigate(paths.list)))} />
+      <NextStep drive={drive} doing={doing} clashNote={clashes?.some((c) => c.severity === "high") ? clashNote(clashes) : ""} onDelete={() => void act.run(async () => (await drivesApi.remove(drive.id), navigate(paths.list)))} />
 
       <nav className="ui-tabs dd-tabs" aria-label="Drive sections">
         <a className="ui-tab" href="?tab=overview" aria-current={tab === "overview" ? "page" : undefined} onClick={(e) => (e.preventDefault(), setParams({}))}>
@@ -84,7 +97,7 @@ export default function DriveDetail() {
       </nav>
 
       {tab === "overview" ? (
-        <Overview drive={drive} />
+        <Overview drive={drive} clashes={clashes} />
       ) : tab === "feedback" ? (
         <FeedbackReview driveId={drive.id} />
       ) : tab === "offers" ? (
@@ -97,11 +110,11 @@ export default function DriveDetail() {
 }
 
 /** One quiet bar: where the drive is, the next thing to do, and the rarer actions behind "More". */
-function NextStep({ drive, doing, onDelete }: { drive: OfficeDrive; doing: (msg: string, fn: () => Promise<OfficeDrive | void>) => void; onDelete: () => void }) {
+function NextStep({ drive, doing, onDelete, clashNote }: { drive: OfficeDrive; doing: (msg: string, fn: () => Promise<OfficeDrive | void>) => void; onDelete: () => void; clashNote: string }) {
   const { role } = useAuth();
   const tpo = role === "TPO";
   const paths = drivePaths(role);
-  const [asking, setAsking] = useState<"reject" | "cancel" | null>(null);
+  const [asking, setAsking] = useState<"reject" | "cancel" | "unannounce" | null>(null);
   const [reason, setReason] = useState("");
   const reasonId = useId();
   const c = drive.can;
@@ -152,16 +165,34 @@ function NextStep({ drive, doing, onDelete }: { drive: OfficeDrive; doing: (msg:
     title = "Closed";
     detail = "This drive is finished and kept for the placement history.";
   }
+  // Placement announcement (TPO): who was selected, shown to the drive's students and on everyone's home page.
+  if (tpo && (drive.status === "RESULTS_DECLARED" || drive.status === "CLOSED")) {
+    if (drive.announcedAt) detail += ` Placements announced ${when(drive.announcedAt)}; students who opted out aren't named.`;
+    else if (drive.selectedCount) detail += ` ${drive.selectedCount} selected. Students in the drive see only the count until you announce the names.`;
+  }
 
   type Act = { label: string; to?: string; run?: () => void; danger?: boolean };
   const main: Act[] = [];
   const more: Act[] = [];
   if (c.decide) {
     main.push({ label: "Approve", run: () => doing("Approved. HR can now invite students.", () => drivesApi.approve(drive.id)) });
-    main.push({ label: "Send back…", run: () => setAsking("reject") });
+    main.push({
+      label: "Send back…",
+      run: () => {
+        if (clashNote && !reason) setReason(clashNote);
+        setAsking("reject");
+      },
+    });
   }
   if (c.submit && !drive.missing.length) main.push({ label: tpo ? "Review and publish" : "Review and send", to: paths.edit(drive.id, "review") });
   if (c.invite && notInvited !== 0) main.push({ label: invitedNow && notInvited ? `Invite ${notInvited} more` : "Invite students", to: "?tab=students" });
+  if (c.announce && drive.selectedCount > 0)
+    main.push({
+      label: "Announce placements",
+      run: () =>
+        window.confirm(`Announce the ${drive.selectedCount} selected student${drive.selectedCount === 1 ? "" : "s"}? Their names go to everyone in this drive and on the home page (except anyone who opted out).`) &&
+        doing("Placements announced. Students in the drive have been told.", () => drivesApi.announce(drive.id)),
+    });
   if (drive.status === "RESULTS_DECLARED") main.push({ label: "Offers", to: "?tab=offers" });
   if (c.edit || c.editRounds) (main.length ? more : main).push({ label: "Edit drive", to: paths.edit(drive.id) });
   if (c.withdraw) more.push({ label: "Take back to edit", run: () => doing("Taken back. You can edit it again.", () => drivesApi.withdraw(drive.id)) });
@@ -170,6 +201,7 @@ function NextStep({ drive, doing, onDelete }: { drive: OfficeDrive; doing: (msg:
       label: "Close drive",
       run: () => window.confirm("Close this drive? HR won't be able to send or change offers after this.") && doing("Drive closed.", async () => (await offersApi.closeDrive(drive.id), drivesApi.get(drive.id))),
     });
+  if (c.unannounce) more.push({ label: "Take down announcement…", danger: true, run: () => setAsking("unannounce") });
   if (c.delete) more.push({ label: "Delete draft", danger: true, run: () => window.confirm("Delete this draft? This can't be undone.") && onDelete() });
   if (c.cancel && !["DRAFT", "REJECTED", "RESULTS_DECLARED"].includes(drive.status)) more.push({ label: "Cancel drive…", danger: true, run: () => setAsking("cancel") });
 
@@ -199,7 +231,7 @@ function NextStep({ drive, doing, onDelete }: { drive: OfficeDrive; doing: (msg:
       )}
       {asking && (
         <div className="ui-status-ask">
-          <label htmlFor={reasonId}>{asking === "reject" ? "What should HR change?" : "Why is it cancelled? Students will see this."}</label>
+          <label htmlFor={reasonId}>{asking === "reject" ? "What should HR change?" : asking === "unannounce" ? "Why take it down? This is kept for the record." : "Why is it cancelled? Students will see this."}</label>
           <textarea id={reasonId} rows={2} value={reason} autoFocus onChange={(e) => setReason(e.target.value)} />
           <div className="buttons">
             <button
@@ -211,10 +243,11 @@ function NextStep({ drive, doing, onDelete }: { drive: OfficeDrive; doing: (msg:
                 setAsking(null);
                 setReason("");
                 if (asking === "reject") doing("Sent back to HR with your note.", () => drivesApi.reject(drive.id, r));
+                else if (asking === "unannounce") doing("Announcement taken down. Students see only the count again.", () => drivesApi.unannounce(drive.id, r));
                 else doing("Drive cancelled. Students and HR have been told.", () => drivesApi.cancel(drive.id, r));
               }}
             >
-              {asking === "reject" ? "Send back" : "Cancel the drive"}
+              {asking === "reject" ? "Send back" : asking === "unannounce" ? "Take it down" : "Cancel the drive"}
             </button>
             <button type="button" onClick={() => setAsking(null)}>
               Never mind
@@ -278,7 +311,94 @@ function MoreMenu({ items }: { items: { label: string; to?: string; run?: () => 
   );
 }
 
-function Overview({ drive }: { drive: OfficeDrive }) {
+/** A note for HR, written from the hard clashes, to start the "send back" message with. */
+function clashNote(clashes: DriveClash[]) {
+  const t = (iso: string | null) => (iso ? when(iso) : "");
+  const lines = clashes
+    .filter((c) => c.severity === "high")
+    .slice(0, 4)
+    .map((c) =>
+      c.kind === "venue"
+        ? `- ${c.round?.title}: ${c.round?.venue} is already booked at that time (${t(c.other?.start ?? null)}).`
+        : `- ${c.round?.title} (${t(c.round?.start ?? null)}): ${c.shared} of the students who can apply have another drive's round at the same time.`,
+    );
+  return `Please move these rounds to avoid clashes on campus:\n${lines.join("\n")}`;
+}
+
+const CLASH_TEXT: Record<DriveClash["kind"], string> = {
+  venue: "Same venue, same time",
+  students: "Same students, same time",
+  busy_day: "Busy day",
+  deadline: "Joining closes the same day",
+};
+
+/** The TPO's clash check: what this drive's schedule runs into on campus, worst first. */
+function Clashes({ clashes }: { clashes: DriveClash[] }) {
+  const time = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }) : "");
+  const high = clashes.filter((c) => c.severity === "high").length;
+  return (
+    <section className={`rq-card cl-card${high ? " is-high" : ""}`} aria-labelledby="clash-title">
+      <div className="rq-card-head dd-card-head">
+        <div>
+          <h2 id="clash-title">
+            Clashes <span className="ui-tab-count">{clashes.length}</span>
+          </h2>
+          <p>{clashes.length ? "Checked against every other drive waiting for approval or running. Approve anyway if they're fine, or send it back with the note filled in." : "No clashes with other drives on campus."}</p>
+        </div>
+        <Link className="button small" to="/office/calendar">
+          Open calendar
+        </Link>
+      </div>
+      {clashes.length > 0 && (
+        <ul className="cl-list">
+          {clashes.map((c, i) => (
+            <li key={i} className={`cl-item is-${c.severity}`}>
+              <span className="cl-dot" aria-hidden="true" />
+              <span className="cl-text">
+                <span className="cl-title">
+                  {CLASH_TEXT[c.kind]}
+                  {c.round && <span className="cl-round"> · {c.round.title}</span>}
+                </span>
+                <span className="cl-detail">
+                  {c.kind === "venue" && (
+                    <>
+                      {c.round?.venue} on {when(c.round?.start ?? null)}, also booked by{" "}
+                      <Link to={`/office/drives/${c.other!.driveId}`}>
+                        {c.other!.company} · {c.other!.roleTitle}
+                      </Link>{" "}
+                      ({c.other!.roundTitle}, {time(c.other!.start)}–{time(c.other!.end)}).
+                    </>
+                  )}
+                  {c.kind === "students" && (
+                    <>
+                      {c.shared} student{c.shared === 1 ? "" : "s"} who can apply here {c.shared === 1 ? "is" : "are"} also in{" "}
+                      <Link to={`/office/drives/${c.other!.driveId}`}>
+                        {c.other!.company} · {c.other!.roleTitle}
+                      </Link>
+                      , whose {c.other!.roundTitle} runs {time(c.other!.start)}–{time(c.other!.end)} that day.
+                    </>
+                  )}
+                  {c.kind === "busy_day" && <>{c.count} other drives already have rounds on {when(c.round?.start ?? null, false)}.</>}
+                  {c.kind === "deadline" && (
+                    <>
+                      <Link to={`/office/drives/${c.other!.driveId}`}>
+                        {c.other!.company} · {c.other!.roleTitle}
+                      </Link>{" "}
+                      also closes joining that day, with {c.shared} of the same students.
+                    </>
+                  )}
+                </span>
+              </span>
+              <Badge tone={c.severity === "high" ? "danger" : "warning"}>{c.severity === "high" ? "Clash" : "Heads-up"}</Badge>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function Overview({ drive, clashes }: { drive: OfficeDrive; clashes: DriveClash[] | null }) {
   const { role } = useAuth();
   const paths = drivePaths(role);
   const live = ["PUBLISHED", "ONGOING", "RESULTS_DECLARED", "CLOSED"].includes(drive.status);
@@ -286,6 +406,7 @@ function Overview({ drive }: { drive: OfficeDrive }) {
   return (
     <div className="ui-split rq-split">
       <div className="rq-main">
+        {clashes && <Clashes clashes={clashes} />}
         <section className="rq-card">
           <div className="rq-card-head dd-card-head">
             <div>

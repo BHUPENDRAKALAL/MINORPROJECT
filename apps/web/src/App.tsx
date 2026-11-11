@@ -33,6 +33,9 @@ import PanelScreen from "./pages/app/drives/PanelScreen";
 import { CompanyTeam, MyPanels } from "./pages/app/drives/Interviews";
 import Notifications from "./pages/app/Notifications";
 import OfficeOverview from "./pages/app/OfficeOverview";
+import OfficeStudents from "./pages/app/OfficeStudents";
+import OfficeStudent from "./pages/app/OfficeStudent";
+import OfficeCalendar from "./pages/app/OfficeCalendar";
 import { Toasts } from "./app/Toasts";
 
 function Loading() {
@@ -148,6 +151,8 @@ function pageFor(area: NavArea, key: string) {
   if (area === STUDENT_AREA && key === "profile") return <StudentProfile />;
   if (area === OFFICE_AREA && key === "overview") return <OfficeOverview />;
   if (area === OFFICE_AREA && key === "review") return <ReviewQueue />;
+  if (area === OFFICE_AREA && key === "students") return <OfficeStudents />;
+  if (area === OFFICE_AREA && key === "calendar") return <OfficeCalendar />;
   if (area === OFFICE_AREA && key === "team") return <Team />;
   if (area === STUDENT_AREA && key === "drives") return <StudentDrives />;
   if ((area === OFFICE_AREA || area === COMPANY_AREA) && key === "drives") return <DriveList />;
@@ -162,6 +167,7 @@ const DRIVE_HR: Role[] = ["COMPANY_HR"];
 
 /** Pages under a nav item (a drive, its editor). Each opens only for its roles. */
 const SUB_PAGES: { path: string; roles: Role[]; element: ReactNode }[] = [
+  { path: "/office/students/:id", roles: ["TPO", "STAFF"], element: <OfficeStudent /> },
   { path: "/office/drives/new", roles: DRIVE_OFFICE, element: <DriveEditor /> },
   { path: "/office/drives/:id", roles: DRIVE_OFFICE, element: <DriveDetail /> },
   { path: "/office/drives/:id/edit", roles: DRIVE_OFFICE, element: <DriveEditor /> },

@@ -1,7 +1,7 @@
-import { useId } from "react";
+import { useEffect, useId, useState } from "react";
 import { MAX_ROUNDS, nextRoundTitle, ROUND_KINDS, ROUND_TEMPLATES, ROUND_TYPES, type RoundType } from "@cyrus/shared";
 import { Field, SelectField, TextField } from "../../../components/form";
-import type { Round } from "../../../lib/api";
+import { scheduleApi, type Round, type SlotNote } from "../../../lib/api";
 import { fromLocalInput, renumber, toLocalInput } from "./format";
 
 const blank = (type: RoundType, existing: Round[]): Round => ({
@@ -14,7 +14,7 @@ const blank = (type: RoundType, existing: Round[]): Round => ({
   instructions: null,
 });
 
-export function RoundBuilder({ rounds, onChange, errors = {} }: { rounds: Round[]; onChange: (r: Round[]) => void; errors?: Record<string, string> }) {
+export function RoundBuilder({ rounds, onChange, errors = {}, driveId }: { rounds: Round[]; onChange: (r: Round[]) => void; errors?: Record<string, string>; driveId?: string }) {
   const full = rounds.length >= MAX_ROUNDS;
   const set = (i: number, patch: Partial<Round>) => onChange(rounds.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const move = (i: number, by: -1 | 1) => {
@@ -61,6 +61,7 @@ export function RoundBuilder({ rounds, onChange, errors = {} }: { rounds: Round[
             i={i}
             last={i === rounds.length - 1}
             errors={errors}
+            driveId={driveId}
             onSet={(p) => set(i, p)}
             onMove={(by) => move(i, by)}
             onRemove={() => onChange(renumber(rounds.filter((_, j) => j !== i)))}
@@ -76,6 +77,7 @@ function RoundCard({
   i,
   last,
   errors,
+  driveId,
   onSet,
   onMove,
   onRemove,
@@ -84,6 +86,7 @@ function RoundCard({
   i: number;
   last: boolean;
   errors: Record<string, string>;
+  driveId?: string;
   onSet: (p: Partial<Round>) => void;
   onMove: (by: -1 | 1) => void;
   onRemove: () => void;
@@ -91,6 +94,7 @@ function RoundCard({
   const started = r.status != null && r.status !== "SCHEDULED";
   const notesId = useId();
   const err = (f: string) => errors[`rounds.${i}.${f}`];
+  const busy = useBusyHint(driveId, r);
   return (
     <li className="panel cy-round-card" aria-label={`Round ${i + 1}: ${r.title || ROUND_KINDS[r.type].label}`}>
       <div className="cy-round-card-head">
@@ -145,6 +149,19 @@ function RoundCard({
           />
         )}
       </div>
+      {busy.length > 0 && (
+        <div className="rb-busy" role="status">
+          <p className="rb-busy-title">Campus is busy at this time</p>
+          <ul>
+            {busy.map((n, k) => (
+              <li key={k} className={`is-${n.severity}`}>
+                {n.message}
+              </li>
+            ))}
+          </ul>
+          <p className="rb-busy-foot">You can keep it; the placement office sees the same and may ask you to move it.</p>
+        </div>
+      )}
       <TextField
         id={notesId}
         label="Instructions for students"
@@ -157,4 +174,32 @@ function RoundCard({
       />
     </li>
   );
+}
+
+/**
+ * While HR picks a round's time and venue: is campus busy then? Asks the API a moment after the time,
+ * venue or mode stops changing. Shows nothing until the drive exists and the round has a time.
+ */
+function useBusyHint(driveId: string | undefined, r: Round): SlotNote[] {
+  const [notes, setNotes] = useState<SlotNote[]>([]);
+  const key = driveId && r.startsAt ? `${driveId}|${r.startsAt}|${r.mode}|${r.venue ?? ""}|${r.title}` : "";
+  useEffect(() => {
+    if (!key || !driveId || !r.startsAt) {
+      setNotes([]);
+      return;
+    }
+    let gone = false;
+    const t = setTimeout(() => {
+      scheduleApi.slotCheck(driveId, { title: r.title || "This round", mode: r.mode, startsAt: r.startsAt!, venue: r.mode === "OFFLINE" ? r.venue : null }).then(
+        (res) => !gone && setNotes(res.notes),
+        () => !gone && setNotes([]),
+      );
+    }, 500);
+    return () => {
+      gone = true;
+      clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return notes;
 }

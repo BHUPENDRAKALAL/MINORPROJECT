@@ -63,7 +63,7 @@ test("interview day: HR sets up a panel, the interviewer runs the line, the TPO 
   await page.getByLabel(/Remark for the student/).fill("Good communication. Practise SQL joins.");
   await shot(page, "3-panel-in-interview");
   await page.getByRole("button", { name: "End interview" }).click();
-  await expect(page.locator(".cy-line li", { hasText: "Aman Gupta" }).locator("summary")).toHaveText("Select");
+  await expect(page.locator(".cy-line li", { hasText: "Aman Gupta" }).locator("summary")).toContainText("Recommended: Select");
   await signOut(page);
 
   // The remark isn't shown until the TPO sends it; private notes never are

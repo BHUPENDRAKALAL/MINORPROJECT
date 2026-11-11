@@ -12,7 +12,7 @@
 | Students | Seya Mali (24UCSE4073), Bhupendra Kalal (24UCSE4008) |
 | Guide / Mentor | Dr. Abhishek Gaur / Dr. Simran Choudhary |
 | Base document | Original synopsis (`kalaaaal.pdf`). This plan extends it with the **Company HR–driven drive flow** |
-| Last updated | 2026-11-10 |
+| Last updated | 2026-11-11 |
 
 ---
 
@@ -110,7 +110,7 @@ Built 2026-11-08 (Phase B1/B2). Each round has its own page for HR and the TPO.
    - HR picks a result per student (Selected / Not selected / On hold), saves (students see nothing yet), or **uploads a CSV** from the test platform: any file whose first row has a roll-number column and a result column (Selected/Rejected, Pass/Fail, Qualified/Not qualified…). Rows that don't match a student in the round are listed back.
    - **Publish** (can't be undone; needs every present student decided and nobody on hold): not selected → out of the drive; absent → out + no-show counted on the student (policy warning); selected → next round. After the **last round**, selected students are **selected for the job** and the drive becomes "Results out".
    - A pre-placement talk has no results: "Finish the talk" only records who came.
-   - **Result visibility:** each student sees only their own result per round on the drive page ("You cleared this round", "Not selected", "You were absent", "Checked in"). The public selected list stays a later option.
+   - **Result visibility:** each student sees only their own result per round on the drive page ("You cleared this round", "Not selected", "You were absent", "Checked in"). Once final results are out, students who took part see how many were selected; names appear only after the TPO announces the drive, and a student can opt out of being named (counted, not named). Announced drives also show as Placement news on the student home page.
 
 ### 3.6 Interview round & live queue
 Built 2026-11-08 (Phase B3). Works for Technical, Interview and HR rounds.
@@ -261,7 +261,7 @@ Repo: PlaceMint, a public placement-portal project on GitHub (Flask + Vue + SQLi
 - [ ] Hosting for backend + DB (Render / Railway / VPS)?
 - [ ] Exact TPO policy rules at MBM (one-offer? dream-offer CTC threshold?)
 - [ ] No-show penalty levels
-- [ ] Is a public selected list shown by default or not?
+- [x] Is a public selected list shown by default or not? **No: the TPO announces it per drive, and students can opt out of being named (11 Nov).**
 - [x] ~~Can companies submit a JD through a public form?~~ → **Yes: Company Portal (section 3.1)**
 - [x] ~~College email for students?~~ → **No college email exists.** Students sign up with a **personal email + email OTP + roll number** (roll number unique). **TPO verification is the identity gate.** Extra safeguard: one account per roll number, plus one per email; if a roll number is already claimed, the student contacts the TPO, who can reset it
 - [ ] Can we get the official student CSV (CGPA/backlogs) from the university? **Likely yes, to be confirmed.** Bulk import stays **optional**; manual verification against uploaded proofs works without it. For development/demo, use a dummy CSV. Once the real format is known, map its columns in the importer
@@ -292,3 +292,4 @@ Repo: PlaceMint, a public placement-portal project on GitHub (Flask + Vue + SQLi
 | 2026-11-09 | Added PROBLEMS-AND-FIXES.md: every bug, setup problem and test failure so far with its cause and fix, plus what's still open. Kept up to date from now on |
 | 2026-11-10 | Uploads are now **cleaned, not scanned**: every PDF is rebuilt from its pages only and every image is re-encoded, in a throw-away process inside a locked-down sanitizer container (no secrets, read-only, not root, memory/CPU limits, restarts itself). Only the clean copy is kept; marksheets stay PDF. ClamAV dropped (needs ~1.5 GB RAM). Live updates stay on polling (no Socket.io needed). See PROBLEMS-AND-FIXES.md |
 | 2026-11-10 | **Frontend overhaul** to one quiet, GitLab-style design system (`apps/web/src/system.css`): creamy light theme, fields sized by content and settings-style form sections, one status bar per page with the rare actions under "⋯", cards and grey-headed tables, Sonner toasts, a full-height side panel and a proper account menu and page. New logo (white disc, green rim, three claw marks, lime dot). Sign-in pages: centred card on a hover-reactive dot shader, the page's character as the text cursor, placeholders and a password strength meter. Rebuilt: review queue (list + task view), student home, drives and drive page, student profile, office/HR drive page, round page, drive editor, panel screen, notifications, team pages. **Office Overview built** (new `GET /admin/overview`, counts only; TPO and staff, volunteers see their own review numbers) |
+| 2026-11-11 | **Office Students page** (all students with search and filters by branch, batch, status, placement, CGPA, backlogs; a page per student with marks, drives and marksheets; TPO and staff only). **Clash check and campus calendar**: the TPO sees clashes (same venue or same students at the same time, busy days, shared joining deadlines) when approving, with a pre-filled send-back note; HR gets anonymous busy-time hints while scheduling (HR still sees only their own company's drives); the TPO is notified if a live drive's new schedule clashes; a week/month calendar of every round and deadline. Review queue rows open their task directly. **Placement announcements**: the TPO announces a finished drive's selected students (or takes it down); students in the drive see the count, then names; Placement news on the student home; students can opt out of being named |

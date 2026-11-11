@@ -283,4 +283,105 @@ describe.skipIf(!hasTestDb)("drives, rounds, approval and invitations (database)
     const draft = await request(t.app).post("/api/v1/drives").set(as(h.token)).send({ roleTitle: "Temp" }).expect(201);
     await request(t.app).delete(`/api/v1/drives/${draft.body.id}`).set(as(h.token)).expect(204);
   });
+
+  it("finds clashes for the TPO, gives HR anonymous busy hints, and tells the TPO when a live schedule starts clashing", async () => {
+    const s = await setup();
+    const { t, tpo, h, other } = s;
+    await verifiedStudent(t, { branch: "CSE", cgpa: 9 });
+    await verifiedStudent(t, { branch: "CSE", cgpa: 8.5 });
+    const first = await publishedDrive(s); // Acme: Technical round 1 in LT-3, 8 days from now
+
+    // Another company's drive for the same students, with a round in the same hall at the same time.
+    const h2 = await hr(t, other.id);
+    const tech = new Date(Date.parse(rounds[1]!.startsAt!) + 30 * 60_000).toISOString();
+    const d = await request(t.app).post("/api/v1/drives").set(as(h2.token)).send({ ...fullDrive, roleTitle: "Data Engineer" }).expect(201);
+    await request(t.app)
+      .put(`/api/v1/drives/${d.body.id}/rounds`)
+      .set(as(h2.token))
+      .send({ rounds: [{ type: "TECHNICAL", title: "Technical round", mode: "OFFLINE", startsAt: tech, venue: " lt-3 " }] })
+      .expect(200);
+    await request(t.app).post(`/api/v1/drives/${d.body.id}/submit`).set(as(h2.token)).expect(200);
+
+    // The TPO, while approving, sees both clashes with names.
+    const c = await request(t.app).get(`/api/v1/drives/${d.body.id}/clashes`).set(as(tpo.token)).expect(200);
+    const kinds = c.body.clashes.map((x: { kind: string }) => x.kind);
+    expect(kinds).toEqual(expect.arrayContaining(["venue", "students"]));
+    expect(c.body.clashes[0].severity).toBe("high");
+    expect(c.body.clashes.find((x: { kind: string }) => x.kind === "students").shared).toBe(2);
+    expect(c.body.clashes[0].other.company).toBe("Acme Systems");
+    await request(t.app).get(`/api/v1/drives/${d.body.id}/clashes`).set(as(h2.token)).expect(403);
+
+    // HR checking a time gets hints without another company's name.
+    const hint = await request(t.app).post(`/api/v1/drives/${d.body.id}/slot-check`).set(as(h2.token)).send({ mode: "OFFLINE", startsAt: tech, venue: "LT-3" }).expect(200);
+    expect(hint.body.notes.length).toBeGreaterThan(0);
+    expect(JSON.stringify(hint.body)).not.toContain("Acme");
+    const free = await request(t.app).post(`/api/v1/drives/${d.body.id}/slot-check`).set(as(h2.token)).send({ mode: "OFFLINE", startsAt: inDays(20), venue: "LT-3" }).expect(200);
+    expect(free.body.notes).toEqual([]);
+    // HR can't probe another company's drive.
+    await request(t.app).post(`/api/v1/drives/${first}/slot-check`).set(as(h2.token)).send({ mode: "OFFLINE", startsAt: tech }).expect(404);
+
+    // After approval, HR moves Acme's round onto a new clash: the TPO is told.
+    await request(t.app).post(`/api/v1/admin/drives/${d.body.id}/approve`).set(as(tpo.token)).expect(200);
+    const before = await t.db.notification.count({ where: { userId: tpo.userId, title: { startsWith: "Schedule clash" } } });
+    const live = await request(t.app).get(`/api/v1/drives/${first}`).set(as(h.token)).expect(200);
+    const moved = live.body.rounds.map((r: { id: string; type: string; title: string; mode: string; startsAt: string | null; venue: string | null; onlineLink: string | null }, i: number) => ({
+      id: r.id,
+      type: r.type,
+      title: r.title,
+      mode: r.mode,
+      startsAt: i === 0 ? tech : r.startsAt,
+      venue: r.venue,
+      onlineLink: r.onlineLink,
+    }));
+    await request(t.app).put(`/api/v1/drives/${first}/rounds`).set(as(h.token)).send({ rounds: moved }).expect(200);
+    const after = await t.db.notification.count({ where: { userId: tpo.userId, title: { startsWith: "Schedule clash" } } });
+    expect(after).toBe(before + 1);
+
+    // The campus calendar shows both drives' rounds and flags the shared hall.
+    const from = new Date(Date.now()).toISOString();
+    const to = new Date(Date.now() + 30 * 86_400_000).toISOString();
+    const cal = await request(t.app).get(`/api/v1/admin/calendar?from=${from}&to=${to}`).set(as(tpo.token)).expect(200);
+    expect(cal.body.events.some((e: { company: string }) => e.company === "Other Corp")).toBe(true);
+    expect(cal.body.events.filter((e: { clash: string | null }) => e.clash === "venue").length).toBeGreaterThanOrEqual(2);
+    await request(t.app).get(`/api/v1/admin/calendar?from=${from}&to=${to}`).set(as(h.token)).expect(403);
+  });
+
+  it("the TPO announces who was selected; students who opted out are counted, not named", async () => {
+    const s = await setup();
+    const { t, tpo, h } = s;
+    const id = await publishedDrive(s);
+    const [a, b, c] = [await verifiedStudent(t), await verifiedStudent(t), await verifiedStudent(t)];
+    for (const [st, status] of [[a, "SELECTED"], [b, "PLACED"], [c, "ELIMINATED"]] as const) {
+      await t.db.participation.create({ data: { driveId: id, studentId: st.profileId, status, invitedAt: new Date(), respondedAt: new Date() } });
+    }
+    await request(t.app).patch("/api/v1/students/me").set(as(b.token)).send({ hideInAnnouncements: true }).expect(200);
+
+    // Still running: nothing to announce, students see no list.
+    await request(t.app).post(`/api/v1/admin/drives/${id}/announce`).set(as(tpo.token)).expect(409);
+    expect((await request(t.app).get(`/api/v1/me/drives/${id}`).set(as(c.token)).expect(200)).body.selected).toBeNull();
+
+    // Final results out: the count, no names yet.
+    await t.db.drive.update({ where: { id }, data: { status: "RESULTS_DECLARED" } });
+    let mine = await request(t.app).get(`/api/v1/me/drives/${id}`).set(as(c.token)).expect(200);
+    expect(mine.body.selected).toMatchObject({ count: 2, names: [], hidden: 0, announcedAt: null });
+    await request(t.app).post(`/api/v1/admin/drives/${id}/announce`).set(as(h.token)).expect(403);
+    const off = await request(t.app).post(`/api/v1/admin/drives/${id}/announce`).set(as(tpo.token)).expect(200);
+    expect(off.body.announcedAt).toBeTruthy();
+    expect(off.body.can.announce).toBe(false);
+    await request(t.app).post(`/api/v1/admin/drives/${id}/announce`).set(as(tpo.token)).expect(409);
+
+    // Announced: names, minus the student who opted out.
+    mine = await request(t.app).get(`/api/v1/me/drives/${id}`).set(as(c.token)).expect(200);
+    expect(mine.body.selected.names).toEqual([{ name: "Student " + a.email.match(/\d+/)![0], branch: "CSE" }]);
+    expect(mine.body.selected.hidden).toBe(1);
+    const news = await request(t.app).get("/api/v1/announcements").set(as(c.token)).expect(200);
+    expect(news.body.announcements[0]).toMatchObject({ id, count: 2, hidden: 1 });
+    expect(await t.db.notification.count({ where: { title: { contains: "placements announced" } } })).toBe(3);
+
+    // Taken down: back to the count only.
+    await request(t.app).post(`/api/v1/admin/drives/${id}/unannounce`).set(as(tpo.token)).send({ reason: "Wrong list, fixing it" }).expect(200);
+    mine = await request(t.app).get(`/api/v1/me/drives/${id}`).set(as(a.token)).expect(200);
+    expect(mine.body.selected).toMatchObject({ count: 2, names: [] });
+    expect((await request(t.app).get("/api/v1/announcements").set(as(a.token)).expect(200)).body.announcements).toEqual([]);
+  });
 });

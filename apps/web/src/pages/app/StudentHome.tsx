@@ -4,7 +4,7 @@ import { PARTICIPATION_LABELS } from "@cyrus/shared";
 import { useAuth } from "../../app/useAuth";
 import { Aside, Badge, PageHeader, type Tone } from "../../components/kit";
 import { Avatar } from "../../components/ui";
-import { drivesApi, type MyDriveCard, type StudentStatus } from "../../lib/api";
+import { drivesApi, type MyDriveCard, type PlacementNews, type StudentStatus } from "../../lib/api";
 import { useTitle } from "../../lib/useTitle";
 import { PARTICIPATION_TONE, isActiveForStudent, pay, timeLeft, when } from "./drives/format";
 
@@ -141,11 +141,47 @@ function Upcoming({ drives }: { drives: MyDriveCard[] }) {
   );
 }
 
+/** Placement news: drives where the placement office announced who was selected. */
+function News({ items }: { items: PlacementNews[] }) {
+  if (!items.length) return null;
+  return (
+    <section className="sh-card" aria-labelledby="news-title">
+      <div className="sh-card-head">
+        <h2 id="news-title">Placement news</h2>
+      </div>
+      <ul className="sh-news">
+        {items.map((n) => {
+          const shown = n.names.slice(0, 4);
+          const more = n.count - shown.length;
+          return (
+            <li key={n.id} className="sh-news-item">
+              <p className="sh-news-title">
+                <span className="sh-news-count">{n.count}</span> selected at {n.company} <span className="sh-item-co">· {n.roleTitle}</span>
+              </p>
+              <p className="sh-news-names">
+                {shown.map((x) => `${x.name} (${x.branch})`).join(", ")}
+                {more > 0 && `${shown.length ? " and " : ""}${more} more`}
+              </p>
+              <p className="sh-news-when">
+                {pay(n)} · announced {when(n.announcedAt)}
+              </p>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 export default function StudentHome() {
   const { me } = useAuth();
   useTitle("Home");
   const [drives, setDrives] = useState<MyDriveCard[] | null>(null);
+  const [news, setNews] = useState<PlacementNews[]>([]);
   const verified = me?.student?.status === "VERIFIED";
+  useEffect(() => {
+    drivesApi.announcements().then((r) => setNews(r.announcements), () => setNews([]));
+  }, []);
   useEffect(() => {
     if (verified) drivesApi.mine().then((d) => setDrives(d.mine), () => setDrives([]));
   }, [verified]);
@@ -179,7 +215,9 @@ export default function StudentHome() {
       <div className="ui-split">
         <div className="sh-main">
           {!verified && <Setup status={s.status} />}
-          {verified && (drives ? <Upcoming drives={drives} /> : <div className="sh-card sh-loading" aria-busy="true" />)}        </div>
+          {verified && (drives ? <Upcoming drives={drives} /> : <div className="sh-card sh-loading" aria-busy="true" />)}
+          <News items={news} />
+        </div>
         <div className="rq-side">
           <section className="sh-profile" aria-label="Your profile">
             <div className="sh-profile-top">

@@ -422,6 +422,8 @@ model StudentProfile {
   photoFileId     String?         @db.Uuid
   resumeFileId    String?         @db.Uuid
   placementStatus PlacementStatus @default(NOT_PLACED)
+  /// The student asked not to be named in placement announcements (they are still counted).
+  hideInAnnouncements Boolean       @default(false)
   noShowCount     Int             @default(0)
   blockedUntil    DateTime?
   createdAt       DateTime        @default(now())
@@ -686,6 +688,8 @@ model Drive {
   approvedAt       DateTime?
   rejectionReason  String?
   closedAt         DateTime?
+  /// When the TPO announced the selected students to the drive (names of those who didn't opt out). Null = not announced.
+  announcedAt      DateTime?
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 

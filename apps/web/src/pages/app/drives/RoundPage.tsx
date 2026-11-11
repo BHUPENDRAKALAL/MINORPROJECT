@@ -88,11 +88,30 @@ export default function RoundPage() {
           ? ""
           : round.session
             ? "Close check-in when everyone is in. Students who didn't check in then count as absent, unless the placement office marks them by hand."
-            : round.hasResults
-              ? `${round.counts.selected} selected so far. Students see nothing until you publish.${round.isLast ? " This is the last round: selected students are selected for the job." : ""}`
+            : round.hasResults && round.counts.pending > 0
+              ? `Give each student a result in the Students table below${Object.keys(recs).length ? ", or fill them from the panel's recommendations (anyone absent from the line counts as not selected)" : ""}. Then publish to end the round.`
+              : round.hasResults
+                ? `${round.counts.selected} selected so far. Students see nothing until you publish.${round.isLast ? " This is the last round: selected students are selected for the job." : ""}`
               : `${round.counts.present} checked in. Finish the talk when it's over; everyone stays in the drive${round.tookAttendance ? " except those absent" : ""}.`;
   const running = round.status === "IN_PROGRESS" || round.status === "RESULTS_PENDING";
   const resultOf = (s: RoundStudent) => draft[s.participationId] ?? s.result;
+  /** Results taken from the panels: their recommendation, or "not selected" for a student absent from the line. */
+  const fromPanels = (onlyPending: boolean) =>
+    Object.fromEntries(
+      round.students
+        // Same rule as the table: someone absent from check-in needs no result.
+        .filter((s) => !(round.tookAttendance && !round.session && !s.present) && (!onlyPending || resultOf(s) === "PENDING"))
+        .map((s) => {
+          const r = recs[s.participationId];
+          if (!r) return null;
+          if (r.recommendation) return [s.participationId, REC_TO_RESULT[r.recommendation]] as const;
+          if (r.status === "ABSENT") return [s.participationId, "REJECTED" as ResultValue] as const;
+          return null;
+        })
+        .filter((x): x is readonly [string, ResultValue] => !!x),
+    ) as Record<string, ResultValue>;
+  const panelFill = round.hasResults && round.can.results ? fromPanels(true) : {};
+  const canFill = Object.keys(panelFill).length > 0;
   // Absent only once check-in is closed; while it's open, everyone may still arrive.
   const needsResult = (s: RoundStudent) => !(round.tookAttendance && !round.session && !s.present);
 
@@ -154,6 +173,27 @@ export default function RoundPage() {
         )}
         {running && round.can.publish && !round.session && (
           <div className="ui-status-actions">
+            {canFill && (
+              <button
+                type="button"
+                disabled={act.busy}
+                onClick={() =>
+                  doing(`Filled ${Object.keys(panelFill).length} result${Object.keys(panelFill).length === 1 ? "" : "s"} from the panel. Check them, then publish.`, () =>
+                    roundsApi.setResults(
+                      round.id,
+                      Object.entries(panelFill).map(([participationId, result]) => ({ participationId, result })),
+                    ),
+                  )
+                }
+              >
+                Fill from panel
+              </button>
+            )}
+            {round.hasResults && round.counts.pending > 0 && (
+              <a className="button" href="#round-results">
+                Go to results
+              </a>
+            )}
             <button
               type="button"
               className="primary"
@@ -177,7 +217,7 @@ export default function RoundPage() {
       {running && round.mode === "OFFLINE" && <CheckIn round={round} onChange={setRound} />}
       {panelRound && <PanelsSetup roundId={round.id} running={running} over={round.status === "RESULTS_PUBLISHED" || round.status === "CANCELLED"} />}
 
-      <section className="rq-card">
+      <section className="rq-card" id="round-results">
         <div className="rq-card-head rp-card-head">
           <div>
             <h2>
@@ -194,16 +234,7 @@ export default function RoundPage() {
               {Object.keys(recs).length > 0 && (
                 <button
                   type="button"
-                  onClick={() =>
-                    setDraft((d) => ({
-                      ...d,
-                      ...Object.fromEntries(
-                        round.students
-                          .filter((s) => needsResult(s) && recs[s.participationId]?.recommendation)
-                          .map((s) => [s.participationId, REC_TO_RESULT[recs[s.participationId]!.recommendation!]]),
-                      ),
-                    }))
-                  }
+                  onClick={() => setDraft((d) => ({ ...d, ...Object.fromEntries(Object.entries(fromPanels(false)).filter(([pid]) => needsResult(round.students.find((x) => x.participationId === pid)!))) }))}
                 >
                   Use panel recommendations
                 </button>

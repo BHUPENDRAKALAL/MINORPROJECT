@@ -346,7 +346,7 @@ function RoundsStep({ drive, onSaved }: { drive: OfficeDrive; onSaved: (d: Offic
         Add rounds in the order they happen. The same kind can repeat: add Technical round twice for "Technical round 1" and "Technical round 2". Dates can stay empty until they are fixed.
         {live && " Students in the drive are told when the schedule changes."}
       </p>
-      <RoundBuilder rounds={rounds} onChange={setRounds} errors={form.fieldErrors} />
+      <RoundBuilder rounds={rounds} onChange={setRounds} errors={form.fieldErrors} driveId={drive.id} />
       <div className="form-actions">
         <button className="primary" type="submit" disabled={form.busy}>
           {form.busy ? "Saving…" : "Save rounds and continue"}

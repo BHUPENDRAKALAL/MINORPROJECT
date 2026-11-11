@@ -103,6 +103,7 @@ export const OFFICE_AREA: NavArea = {
     },
     {
       key: "students", to: "/office/students", label: "Students", icon: "data", family: "azure", group: "Students",
+      only: ["TPO", "STAFF"],
       empty: "Every registered student, with their branch, batch, verification and placement status, and filters to find them.",
       sprite: "apprentice",
     },
@@ -115,6 +116,10 @@ export const OFFICE_AREA: NavArea = {
       key: "companies", to: "/office/companies", label: "Companies", icon: "connections", family: "azure", group: "Placements",
       empty: "Companies that have registered or been invited, and the ones waiting for your approval.",
       sprite: "designer",
+    },
+    {
+      key: "calendar", to: "/office/calendar", label: "Calendar", icon: "log", family: "azure", group: "Placements",
+      only: ["TPO", "STAFF"],
     },
     {
       key: "team", to: "/office/team", label: "Team", icon: "activity", family: "sun", group: "Administration", only: ["TPO"],

@@ -299,8 +299,8 @@ test("live drive simulation: every role at once", async ({ browser, request }) =
     })(),
   ]);
   await shot(iv1, "panel-a-done");
-  await expect(iv1.locator(".cy-line li", { hasText: "Pooja Nair" }).locator("summary")).toHaveText("Reject");
-  await expect(iv1.locator(".cy-line li", { hasText: "Isha Verma" }).locator("summary")).toHaveText("Select");
+  await expect(iv1.locator(".cy-line li", { hasText: "Pooja Nair" }).locator("summary")).toContainText("Recommended: Reject");
+  await expect(iv1.locator(".cy-line li", { hasText: "Isha Verma" }).locator("summary")).toContainText("Recommended: Select");
 
   // Students see "Interview done", but no remark yet and never the private notes
   await Promise.all([aman, isha, pooja].map((s) => s.reload()));

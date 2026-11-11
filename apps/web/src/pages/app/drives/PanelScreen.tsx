@@ -165,7 +165,10 @@ export default function PanelScreen() {
                       </>
                     ) : d.session ? (
                       <details className="cy-done-details ps-done">
-                        <summary>{d.session.recommendation ? REC_LABEL[d.session.recommendation] : "No recommendation"}</summary>
+                        <summary>
+                          {d.session.recommendation ? `Recommended: ${REC_LABEL[d.session.recommendation]}` : "No recommendation"}
+                          <span className="ps-done-hint"> · notes</span>
+                        </summary>
                         <KeyPointsSummary k={{ ...d.session, average: avg(d.session.ratings) }} criteria={panel.criteria} />
                       </details>
                     ) : (
@@ -249,7 +252,7 @@ function Current({ row, busy, doing, criteria }: { row: QueueRow; busy: boolean;
 
       <div className="ps-earlier">
       <EarlierRounds history={row.history} />
-      </div>      <EarlierRounds history={row.history} />
+      </div>
 
       {row.status === "CALLED" ? (
         <div className="ps-actions">

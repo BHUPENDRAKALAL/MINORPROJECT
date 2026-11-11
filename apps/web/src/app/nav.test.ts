@@ -8,7 +8,7 @@ describe("side panel groups", () => {
     expect(shape("TPO")).toEqual([
       ["", ["Overview", "Notifications"]],
       ["Students", ["Review queue", "Students"]],
-      ["Placements", ["Drives", "Companies"]],
+      ["Placements", ["Drives", "Companies", "Calendar"]],
       ["Administration", ["Team", "Settings"]],
     ]);
   });

@@ -30,6 +30,7 @@ const Patch = z
     links: z.array(z.object({ label: z.string().trim().min(1).max(40), url: z.string().url().max(300) })).max(5).optional(),
     resumeFileId: z.string().uuid().nullable().optional(),
     photoFileId: z.string().uuid().nullable().optional(),
+    hideInAnnouncements: z.boolean().optional().describe("Leave my name out of placement announcements"),
   })
   .strict();
 

@@ -138,6 +138,7 @@ function FullDrive({ drive, onChange }: { drive: Full; onChange: (d: StudentDriv
       <div className="ui-split rq-split">
         <div className="rq-main">
           {drive.offer && <OfferCard drive={drive} onChange={onChange} />}
+          {drive.selected && drive.selected.count > 0 && <SelectedCard drive={drive} />}
           <section className="rq-card">
             <div className="rq-card-head">
               <h2>Rounds</h2>
@@ -183,6 +184,55 @@ function FullDrive({ drive, onChange }: { drive: Full; onChange: (d: StudentDriv
         </div>
       </div>
     </>
+  );
+}
+
+const SELECTED_ME = new Set(["SELECTED", "OFFERED", "PLACED"]);
+
+/** Who was selected: the count once the final results are out; names once the placement office announces them. */
+function SelectedCard({ drive }: { drive: Full }) {
+  const sel = drive.selected!;
+  const me = SELECTED_ME.has(drive.me.status);
+  const others = sel.count - (me ? 1 : 0);
+  const head = me
+    ? sel.count === 1
+      ? "You're the only one selected"
+      : `You're 1 of ${sel.count} selected`
+    : `${sel.count} student${sel.count === 1 ? "" : "s"} selected`;
+  return (
+    <section className="rq-card sd-selected" aria-label="Who was selected">
+      <div className="rq-card-head">
+        <h2>{head}</h2>
+        <p>
+          {sel.announcedAt
+            ? `Announced by the placement office ${when(sel.announcedAt)}.${sel.hidden ? " Some students chose not to be named." : ""}`
+            : `The placement office hasn't announced the names yet${me && others ? `, so you'll see who the other ${others === 1 ? "one is" : others} are once it does` : ""}.`}
+        </p>
+      </div>
+      {sel.announcedAt && (
+        <ul className="sd-sel-list">
+          {sel.names.map((n) => (
+            <li key={`${n.name}-${n.branch}`}>
+              <span className="sd-sel-avatar" aria-hidden="true">
+                {n.name
+                  .split(/\s+/)
+                  .map((w) => w[0])
+                  .slice(0, 2)
+                  .join("")}
+              </span>
+              <span className="sd-sel-name">{n.name}</span>
+              <span className="sd-sel-branch">{n.branch}</span>
+            </li>
+          ))}
+          {sel.hidden > 0 && <li className="sd-sel-more">+{sel.hidden} more who chose not to be named</li>}
+        </ul>
+      )}
+      {sel.announcedAt && me && (
+        <p className="sd-sel-foot">
+          Don't want your name here? <Link to="/student/profile">Turn it off in your profile</Link>.
+        </p>
+      )}
+    </section>
   );
 }
 
